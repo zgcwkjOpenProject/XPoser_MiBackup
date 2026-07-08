@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="服务配置"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="备份协议"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="8dp" />
+
+        <RadioGroup
+            android:id="@+id/rg_protocol"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="20dp">
+
+            <RadioButton
+                android:id="@+id/rb_smb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SMB/CIFS"
+                android:textColor="@color/text_primary"
+                android:checked="true"
+                android:layout_marginEnd="24dp" />
+
+            <RadioButton
+                android:id="@+id/rb_webdav"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="WebDAV"
+                android:textColor="@color/text_primary" />
+        </RadioGroup>
+
+        <!-- SMB配置面板 -->
+        <LinearLayout
+            android:id="@+id/panel_smb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="服务器地址"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_smb_server"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="例: 192.168.1.100"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="端口"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_smb_port"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="445"
+                android:inputType="number"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="共享文件夹"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_smb_share"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="例: backup"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="用户名（留空为匿名）"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_smb_user"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="用户名"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="密码"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_smb_pass"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="密码"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="24dp" />
+        </LinearLayout>
+
+        <!-- WebDAV配置面板 -->
+        <LinearLayout
+            android:id="@+id/panel_webdav"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="服务器地址"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_webdav_url"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="例: https://192.168.1.100:8080/dav"
+                android:inputType="textUri"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="安卓系统要求必须使用 HTTPS，否则无法连接"
+                android:textSize="12sp"
+                android:textColor="#F44336"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="用户名"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_webdav_user"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="用户名"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="密码"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_webdav_pass"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="密码"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="24dp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_save"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="保存配置"
+            android:backgroundTint="@color/primary" />
+
+        <TextView
+            android:id="@+id/tv_footer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="@string/footer_text"
+            android:textSize="12sp"
+            android:textColor="@color/text_hint"
+            android:textColorLink="@color/primary"
+            android:autoLink="web"
+            android:layout_marginTop="24dp" />
+
+    </LinearLayout>
+</ScrollView>

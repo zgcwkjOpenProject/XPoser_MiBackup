@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">云备份助手</string>
+    <string name="author">zgcwkj</string>
+    <string name="author_url">http://www.zgcwkj.cn</string>
+    <string name="footer_text">Powered by <a href="http://www.zgcwkj.cn">zgcwkj</a></string>
+</resources>

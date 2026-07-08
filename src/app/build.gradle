@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.zgcwkj.xpmibackup'
+    compileSdk 36
+    buildToolsVersion "36.0.0"
+
+    defaultConfig {
+        applicationId "com.zgcwkj.xpmibackup"
+        minSdk 28
+        targetSdk 36
+        versionCode 260707
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            // 代码混淆
+            minifyEnabled false
+
+            // 移除没用的资源文件
+            shrinkResources false
+
+            // 关闭调试选项
+            debuggable false
+
+            // Includes the default ProGuard rules files that are packaged with
+            // the Android Gradle plugin. To learn more, go to the section about
+            // R8 configuration files.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    signingConfigs {
+        debug {
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+        release {
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += "META-INF/**"
+            excludes += "DebugProbesKt.bin"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+    }
+}
+
+dependencies {
+    compileOnly 'de.robv.android.xposed:api:82'
+    compileOnly 'de.robv.android.xposed:api:82:sources'
+
+    implementation 'com.hierynomus:smbj:0.13.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}

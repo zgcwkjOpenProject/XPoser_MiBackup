@@ -1,11 +1,11 @@
+# ---> Android
 # Gradle files
+.DS_Store
 .gradle/
 build/
-.*/
 
 # Local configuration file (sdk path, etc)
 local.properties
-build_install.bat
 
 # Log/OS Files
 *.log
@@ -14,16 +14,12 @@ build_install.bat
 captures/
 .externalNativeBuild/
 .cxx/
-*.aab
 *.apk
-output-metadata.json
+output.json
 
 # IntelliJ
 *.iml
 .idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
 
 # Keystore files
 *.jks
@@ -34,3 +30,22 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# ---> VisualStudioCode
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Local History for Visual Studio Code
+.history/
+.mimocode/
+
+# Built Visual Studio Code Extensions
+*.vsix
+
+jadx/
+.mimocode/

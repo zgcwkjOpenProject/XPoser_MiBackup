@@ -1,0 +1,8 @@
+// Top-level build file
+plugins {
+    alias(libs.plugins.androidApplication) apply false
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
