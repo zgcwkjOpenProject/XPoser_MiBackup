@@ -1,13 +1,12 @@
 package com.zgcwkj.xpmibackup.hook;
 
 import android.content.Intent;
-import android.database.MatrixCursor;
 import android.os.Bundle;
+import com.zgcwkj.comm.LogHelp;
 
 import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -20,6 +19,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * 2. hook SmartStorageController.getAvailabilityStatus → 强制返回0（功能可用）
  * 3. hook SmartStorageBackupHelper.isSupported → 强制返回true（已支持）
  * 4. hook BackupNasDeviceProvider.query → 返回模拟的NAS设备数据
+ * 5. hook SmartStorageController.addDevicePreference → 替换设备描述文字
  */
 public class SettingsHook {
 
@@ -32,15 +32,12 @@ public class SettingsHook {
     public void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         // 配置程序入口
         hookUpdateHeaderList(lpparam);
-        // 强制支持智能存储备
+        // 强制支持智能存储备份
         hookGetAvailabilityStatus(lpparam);
         hookIsSupported(lpparam);
         // 设备信息
         hookBackupNasDeviceProvider(lpparam);
         hookSmartStorageSummary(lpparam);
-        // 进度页面
-        hookProgressPageFragmentBase(lpparam);
-        hookProgressPageFragment(lpparam);
     }
 
     /**
@@ -67,12 +64,12 @@ public class SettingsHook {
                         if (list == null || list.isEmpty()) return;
 
                         // 遍历找"小米澎湃AI"
-                        int aiIndex = -1;
-                        for (int i = 0; i < list.size(); i++) {
+                        var aiIndex = -1;
+                        for (var i = 0; i < list.size(); i++) {
                             var header = list.get(i);
                             var title = XposedHelpers.getObjectField(header, "title");
                             var titleRes = XposedHelpers.getIntField(header, "titleRes");
-                            String titleStr = title != null ? title.toString() : "";
+                            var titleStr = title != null ? title.toString() : "";
                             if (titleStr.isEmpty() && titleRes > 0) {
                                 try {
                                     var res = ((android.app.Activity) param.thisObject).getResources();
@@ -111,7 +108,9 @@ public class SettingsHook {
                         list.add(aiIndex + 1, header);
                     }
                 });
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            logError("hookUpdateHeaderList failed", e);
+        }
     }
 
     /**
@@ -128,7 +127,9 @@ public class SettingsHook {
                     param.setResult(0);
                 }
             });
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            logError("hookGetAvailabilityStatus failed", e);
+        }
     }
 
     /**
@@ -145,7 +146,9 @@ public class SettingsHook {
                     param.setResult(true);
                 }
             });
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            logError("hookIsSupported failed", e);
+        }
     }
 
     /**
@@ -164,7 +167,7 @@ public class SettingsHook {
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        var cursor = new MatrixCursor(new String[]{"device_id", "device_name", "device_type"});
+                        var cursor = new android.database.MatrixCursor(new String[]{"device_id", "device_name", "device_type"});
                         cursor.addRow(new Object[]{deviceId, deviceName, "nas"});
                         var extras = new Bundle();
                         var deviceList = new java.util.HashMap<String, String>();
@@ -174,7 +177,9 @@ public class SettingsHook {
                         param.setResult(cursor);
                     }
                 });
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            logError("hookBackupNasDeviceProvider failed", e);
+        }
     }
 
     /**
@@ -199,7 +204,7 @@ public class SettingsHook {
                     var getCount = category.getClass().getMethod("getPreferenceCount");
                     var getPref = category.getClass().getMethod("getPreference", int.class);
                     var count = (int) getCount.invoke(category);
-                    for (int i = 0; i < count; i++) {
+                    for (var i = 0; i < count; i++) {
                         var pref = getPref.invoke(category, i);
                         var prefKey = (String) pref.getClass().getMethod("getKey").invoke(pref);
                         var summary = com.zgcwkj.comm.ConfigHelp.getString("device_describe", "");
@@ -210,76 +215,12 @@ public class SettingsHook {
                     }
                 }
             });
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            logError("hookSmartStorageSummary failed", e);
+        }
     }
 
-    /**
-     * 拦截ProgressPageFragmentBase的UI更新
-     * 1. 阻止暂停UI显示，避免干扰恢复流程
-     * 2. 注册广播接收器监听备份完成/取消信号，触发页面关闭
-     * 3. 拦截onResult方法，用户点击"完成"按钮后关闭APP
-     */
-    private void hookProgressPageFragmentBase(XC_LoadPackage.LoadPackageParam lpparam) {
-        try {
-            var clazz = XposedHelpers.findClass("com.miui.backup.activity.ProgressPageFragmentBase", lpparam.classLoader);
-
-            // hook updateNasSuspendUi：阻止暂停UI显示
-            XposedHelpers.findAndHookMethod(clazz, "updateNasSuspendUi", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
-                    p.setResult(null);
-                }
-            });
-
-            // hook onCreateView：注册普通广播接收器，监听finishProgressPage信号
-            XposedHelpers.findAndHookMethod(clazz, "onCreateView",
-                android.view.LayoutInflater.class, android.view.ViewGroup.class, android.os.Bundle.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        var fragment = param.thisObject;
-                        var activity = (android.app.Activity) XposedHelpers.callMethod(fragment, "getActivity");
-                        if (activity == null) return;
-                        var filter = new android.content.IntentFilter("com.miui.backup.finishProgressPage");
-                        activity.registerReceiver(new android.content.BroadcastReceiver() {
-                            @Override
-                            public void onReceive(android.content.Context ctx, android.content.Intent intent) {
-                                try {
-                                    XposedHelpers.callMethod(fragment, "onResult", true, new android.content.Intent());
-                                } catch (Throwable ignored) {}
-                                activity.finish();
-                            }
-                        }, filter);
-                    }
-                });
-
-            // hook onResult：用户点击"完成"按钮时关闭APP
-            XposedHelpers.findAndHookMethod(clazz, "onResult", boolean.class, android.content.Intent.class, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    var fragment = param.thisObject;
-                    var activity = (android.app.Activity) XposedHelpers.callMethod(fragment, "getActivity");
-                    if (activity != null) activity.finish();
-                }
-            });
-        } catch (Throwable ignored) {}
-    }
-
-    /**
-     * 拦截ProgressPageFragment.onResult()
-     * 原方法会先startActivity跳转再finish，直接finish关闭整个APP
-     */
-    private void hookProgressPageFragment(XC_LoadPackage.LoadPackageParam lpparam) {
-        try {
-            var clazz = XposedHelpers.findClass("com.miui.backup.activity.ProgressPageFragment", lpparam.classLoader);
-            XposedHelpers.findAndHookMethod(clazz, "onResult", boolean.class, android.content.Intent.class, new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    var fragment = param.thisObject;
-                    var activity = (android.app.Activity) XposedHelpers.callMethod(fragment, "getActivity");
-                    if (activity != null) activity.finish();
-                    param.setResult(null);
-                }
-            });
-        } catch (Throwable ignored) {}
+    private static void logError(String message, Throwable e) {
+        LogHelp.e(TAG, message + ": " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
     }
 }

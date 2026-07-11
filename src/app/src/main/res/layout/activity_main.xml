@@ -19,15 +19,32 @@
         android:background="@color/primary"
         android:gravity="center_vertical"
         android:paddingStart="16dp"
-        android:paddingEnd="16dp">
+        android:paddingEnd="8dp">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="云备份助手"
             android:textSize="20sp"
             android:textStyle="bold"
             android:textColor="@android:color/white" />
+
+        <!-- 跳转到备份APP的智能存储(NAS)备份页面 -->
+        <TextView
+            android:id="@+id/btn_open_backup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="备份"
+            android:textSize="15sp"
+            android:textColor="@android:color/white"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?android:attr/selectableItemBackground"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp" />
     </LinearLayout>
 
     <!-- 内容区域 -->

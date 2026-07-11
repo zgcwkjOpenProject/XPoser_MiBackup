@@ -1,7 +1,6 @@
 package com.zgcwkj.xpmibackup;
 
 import android.app.Activity;
-import android.app.Fragment;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -35,6 +34,30 @@ public class MainActivity extends Activity {
 
         findViewById(R.id.tab_device).setOnClickListener(v -> switchTab("device"));
         findViewById(R.id.tab_service).setOnClickListener(v -> switchTab("service"));
+
+        // 顶部"备份"按钮：跳转到小米备份APP的智能存储(NAS)备份页面(NASHomeActivity)
+        // 用 intent action 跳转，action 名不被混淆，比直接指定类名更稳
+        // 必须传 deviceId/deviceName：NASHomeActivity.onCreate 会读这两个 extra，
+        // deviceId 传给 DistFileClientService.setDeviceId，缺失则连接时 "device id is null" 失败
+        findViewById(R.id.btn_open_backup).setOnClickListener(v -> {
+            var deviceId = com.zgcwkj.comm.ConfigHelp.getString("device_id", "");
+            var deviceName = com.zgcwkj.comm.ConfigHelp.getString("device_name", "");
+            if (deviceId.isEmpty()) {
+                android.widget.Toast.makeText(this, "请先在设备配置中填写设备ID",
+                    android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            var intent = new Intent("miui.intent.backup.NAS_HOME_ACTIVITY");
+            intent.putExtra("deviceId", deviceId);
+            intent.putExtra("deviceName", deviceName);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(intent);
+            } catch (Exception e) {
+                android.widget.Toast.makeText(this, "未找到备份APP，请确认已安装小米备份",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
 
         // 状态栏占位：动态设置空白View高度为状态栏高度
         var statusBarRes = getResources().getIdentifier("status_bar_height", "dimen", "android");
@@ -72,7 +95,7 @@ public class MainActivity extends Activity {
      * 切换时更新Tab图标和文字颜色（选中=主题色，未选中=灰色）
      */
     private void switchTab(String tab) {
-        Fragment fragment;
+        var fragment = (android.app.Fragment) null;
         if ("service".equals(tab)) {
             fragment = new com.zgcwkj.xpmibackup.ui.ServiceConfigFragment();
             tabDeviceIcon.setTextColor(getResources().getColor(R.color.text_disabled));

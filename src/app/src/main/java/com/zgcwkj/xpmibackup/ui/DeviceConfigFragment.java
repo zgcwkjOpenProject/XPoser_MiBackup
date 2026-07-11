@@ -8,10 +8,12 @@ import android.view.ViewGroup;
 import android.content.Intent;
 import android.net.Uri;
 import android.widget.EditText;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.zgcwkj.xpmibackup.R;
+import com.zgcwkj.comm.LogHelp;
 
 /**
  * 设备配置界面
@@ -19,7 +21,9 @@ import com.zgcwkj.xpmibackup.R;
  */
 public class DeviceConfigFragment extends Fragment {
 
-    private EditText etDeviceName, etBackupPath, etMaxBackups, etUploadThreads, etSettingsSummary;
+    private static final String TAG = "XpMiBackup";
+    private EditText etDeviceName, etBackupPath, etMaxBackups, etSettingsSummary;
+    private Switch swLogEnabled;
 
     /**
      * 创建设备配置界面视图
@@ -30,9 +34,9 @@ public class DeviceConfigFragment extends Fragment {
         var view = inflater.inflate(R.layout.fragment_device_config, container, false);
         etDeviceName = view.findViewById(R.id.et_device_name);
         etSettingsSummary = view.findViewById(R.id.et_device_describe);
-        etUploadThreads = view.findViewById(R.id.et_upload_threads);
         etBackupPath = view.findViewById(R.id.et_backup_path);
         etMaxBackups = view.findViewById(R.id.et_backup_max);
+        swLogEnabled = view.findViewById(R.id.sw_log_enabled);
         var btnSave = view.findViewById(R.id.btn_save);
 
         // 加载配置
@@ -63,9 +67,9 @@ public class DeviceConfigFragment extends Fragment {
         // 显示到页面
         etDeviceName.setText(cfg.optString("device_name", ""));
         etSettingsSummary.setText(cfg.optString("device_describe", ""));
-        etUploadThreads.setText(cfg.optString("upload_threads", "3"));
         etBackupPath.setText(cfg.optString("backup_path", ""));
         etMaxBackups.setText(cfg.optString("backup_max", "5"));
+        swLogEnabled.setChecked("true".equalsIgnoreCase(cfg.optString("log_enabled", "false")));
     }
 
     /**
@@ -76,17 +80,18 @@ public class DeviceConfigFragment extends Fragment {
             var cfg = com.zgcwkj.comm.ConfigHelp.load();
             var name = etDeviceName.getText().toString().trim();
             var describe = etSettingsSummary.getText().toString().trim();
-            var threads = etUploadThreads.getText().toString().trim();
             var path = etBackupPath.getText().toString().trim();
             var count = etMaxBackups.getText().toString().trim();
             cfg.put("device_id", generateDeviceId(name));
             cfg.put("device_name", name);
             cfg.put("device_describe", describe);
-            cfg.put("upload_threads", threads);
             cfg.put("backup_path", path);
             cfg.put("backup_max", count);
+            cfg.put("log_enabled", swLogEnabled.isChecked() ? "true" : "false");
             com.zgcwkj.comm.ConfigHelp.save(cfg);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LogHelp.e(TAG, "save device config failed: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -97,7 +102,7 @@ public class DeviceConfigFragment extends Fragment {
             var md = java.security.MessageDigest.getInstance("MD5");
             var hash = md.digest(name.getBytes("UTF-8"));
             var sb = new StringBuilder();
-            for (int i = 0; i < 3; i++) {
+            for (var i = 0; i < 3; i++) {
                 sb.append(String.format("%02x", hash[i]));
             }
             return sb.toString();

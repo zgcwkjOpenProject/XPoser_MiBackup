@@ -13,7 +13,9 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Toast;
+import android.widget.Button;
 
+import com.zgcwkj.comm.LogHelp;
 import com.zgcwkj.xpmibackup.R;
 
 /**
@@ -21,18 +23,24 @@ import com.zgcwkj.xpmibackup.R;
  * 管理云端传输协议及连接参数的读写
  * SMB参数：服务器地址、端口、共享文件夹、用户名、密码
  * WebDAV参数：服务器地址(URL)、用户名、密码
+ * 保存时先测试连接，连接成功才保存
  */
 public class ServiceConfigFragment extends Fragment {
 
+    private static final String TAG = "XpMiBackup";
     private RadioGroup rgProtocol;
     private RadioButton rbSmb, rbWebdav;
     private LinearLayout panelSmb, panelWebdav;
+    private EditText etUploadThreads;
     private EditText etSmbServer, etSmbPort, etSmbShare, etSmbUser, etSmbPass;
     private EditText etWebdavUrl, etWebdavUser, etWebdavPass;
+    private Button btnSave;
+    private LinearLayout testingPanel;
 
     /**
      * 创建服务配置界面视图
-     * 绑定协议切换、SMB参数输入框，加载已有配置
+     * 绑定协议切换、SMB/WebDAV参数输入框，加载已有配置
+     * 保存按钮点击后先测试连接再保存
      */
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -44,6 +52,7 @@ public class ServiceConfigFragment extends Fragment {
         rbWebdav = view.findViewById(R.id.rb_webdav);
         panelSmb = view.findViewById(R.id.panel_smb);
         panelWebdav = view.findViewById(R.id.panel_webdav);
+        etUploadThreads = view.findViewById(R.id.et_upload_threads);
         etSmbServer = view.findViewById(R.id.et_smb_server);
         etSmbPort = view.findViewById(R.id.et_smb_port);
         etSmbShare = view.findViewById(R.id.et_smb_share);
@@ -52,7 +61,8 @@ public class ServiceConfigFragment extends Fragment {
         etWebdavUrl = view.findViewById(R.id.et_webdav_url);
         etWebdavUser = view.findViewById(R.id.et_webdav_user);
         etWebdavPass = view.findViewById(R.id.et_webdav_pass);
-        var btnSave = view.findViewById(R.id.btn_save);
+        btnSave = view.findViewById(R.id.btn_save);
+        testingPanel = view.findViewById(R.id.testing_panel);
 
         // 加载配置
         loadConfig();
@@ -68,15 +78,12 @@ public class ServiceConfigFragment extends Fragment {
             }
         });
 
-        // 点击事件
-        btnSave.setOnClickListener(v -> {
-            saveConfig();
-            Toast.makeText(getActivity(), "配置已保存", Toast.LENGTH_SHORT).show();
-        });
+        // 保存按钮：先保存再测试连接
+        btnSave.setOnClickListener(v -> testAndSave());
 
         // 底部链接
         var tvFooter = (TextView) view.findViewById(R.id.tv_footer);
-        tvFooter.setOnClickListener(v ->{
+        tvFooter.setOnClickListener(v -> {
             var uri = Uri.parse(getString(R.string.author_url));
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
         });
@@ -85,7 +92,37 @@ public class ServiceConfigFragment extends Fragment {
     }
 
     /**
-     * 从配置文件读取协议类型和SMB连接参数，填充到对应控件
+     * 先写入临时配置，测试连接，成功则保存，失败则提示检查参数
+     * 后台线程执行网络测试，主线程更新UI
+     */
+    private void testAndSave() {
+        // 禁用按钮，显示转圈
+        btnSave.setEnabled(false);
+        btnSave.setText("测试连接中…");
+        testingPanel.setVisibility(View.VISIBLE);
+
+        new Thread(() -> {
+            // 保存到配置文件（testConnection会读取配置）
+            saveConfig();
+            var ok = com.zgcwkj.comm.CloudFileHelp.testConnection();
+
+            if (getActivity() == null) return;
+            getActivity().runOnUiThread(() -> {
+                testingPanel.setVisibility(View.GONE);
+                btnSave.setEnabled(true);
+                btnSave.setText("保存配置");
+
+                if (ok) {
+                    Toast.makeText(getActivity(), "连接成功，配置已保存", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getActivity(), "连接失败，请检查参数", Toast.LENGTH_LONG).show();
+                }
+            });
+        }).start();
+    }
+
+    /**
+     * 从配置文件读取协议类型和连接参数，填充到对应控件
      */
     private void loadConfig() {
         // 读取配置
@@ -96,6 +133,7 @@ public class ServiceConfigFragment extends Fragment {
         rbWebdav.setChecked("webdav".equals(protocol));
         panelSmb.setVisibility("smb".equals(protocol) ? View.VISIBLE : View.GONE);
         panelWebdav.setVisibility("webdav".equals(protocol) ? View.VISIBLE : View.GONE);
+        etUploadThreads.setText(cfg.optString("upload_threads", "3"));
         // SMB配置
         etSmbServer.setText(cfg.optString("smb_server", ""));
         etSmbPort.setText(String.valueOf(cfg.optInt("smb_port", 445)));
@@ -109,13 +147,14 @@ public class ServiceConfigFragment extends Fragment {
     }
 
     /**
-     * 将当前选中的协议和SMB参数保存到配置文件
+     * 将当前选中的协议和连接参数保存到配置文件
      * 参数用于CloudFileHelp建立连接时读取
      */
     private void saveConfig() {
         try {
             var cfg = com.zgcwkj.comm.ConfigHelp.load();
             cfg.put("protocol", rbSmb.isChecked() ? "smb" : "webdav");
+            cfg.put("upload_threads", etUploadThreads.getText().toString().trim());
             cfg.put("smb_server", etSmbServer.getText().toString().trim());
             cfg.put("smb_port", Integer.parseInt(etSmbPort.getText().toString().trim()));
             cfg.put("smb_share", etSmbShare.getText().toString().trim());
@@ -125,6 +164,8 @@ public class ServiceConfigFragment extends Fragment {
             cfg.put("webdav_user", etWebdavUser.getText().toString().trim());
             cfg.put("webdav_pass", etWebdavPass.getText().toString());
             com.zgcwkj.comm.ConfigHelp.save(cfg);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LogHelp.e(TAG, "save service config failed: " + e.getMessage(), e);
+        }
     }
 }

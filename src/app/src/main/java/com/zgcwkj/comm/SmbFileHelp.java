@@ -10,8 +10,6 @@ import com.hierynomus.smbj.SmbConfig;
 import com.hierynomus.smbj.auth.AuthenticationContext;
 import com.hierynomus.smbj.share.DiskShare;
 
-import android.util.Log;
-
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
@@ -26,11 +24,6 @@ public class SmbFileHelp {
 
     private static final String TAG = "XpMiBackup";
     private static final int BUFFER_SIZE = 1048576; // 1MB
-
-    private static String sBackupDir = null;
-
-    public static String getBackupDir() { return sBackupDir; }
-    public static void setBackupDir(String dir) { sBackupDir = dir; }
 
     // ========== SMB会话管理 ==========
 
@@ -92,11 +85,6 @@ public class SmbFileHelp {
         }
     }
 
-    /** 查询SMB共享的磁盘空间信息（暂不支持） */
-    public static long[] queryDiskSpace(String server, int port, String user, String pass, String share) {
-        return null;
-    }
-
     /** 列出backup_path目录中的备份子目录名 */
     public static List<String> listDirs() throws Exception {
         var dirs = new ArrayList<String>();
@@ -111,14 +99,48 @@ public class SmbFileHelp {
         return dirs;
     }
 
+    /** 列出指定SMB目录下的文件条目，路径相对于共享根目录 */
+    public static List<CloudFileHelp.RemoteEntry> listEntries(String remoteDir) throws Exception {
+        var entries = new ArrayList<CloudFileHelp.RemoteEntry>();
+        try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
+            for (var entry : s.share.list(remoteDir)) {
+                var name = entry.getFileName();
+                if (name.equals(".") || name.equals("..")) continue;
+                var isDir = (entry.getFileAttributes() & 0x10) != 0;
+                var size = isDir ? 0L : entry.getEndOfFile();
+                var modified = entry.getLastWriteTime() != null
+                    ? entry.getLastWriteTime().toEpochMillis()
+                    : System.currentTimeMillis();
+                entries.add(new CloudFileHelp.RemoteEntry(name, size, isDir, modified));
+            }
+        }
+        return entries;
+    }
+
     /** 删除远端目录及其所有内容 */
     public static void deleteDir(String remoteDir) throws Exception {
         try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
-            deleteDirRecursive(s.share, s.backupPath + "/" + remoteDir);
+            var path = normalizeDeletePath(s.backupPath, remoteDir);
+            deleteDirRecursive(s.share, path);
         }
     }
 
     /** 递归删除SMB目录 */
+    /** 兼容完整云端路径和相对备份目录名两种删除调用。 */
+    private static String normalizeDeletePath(String backupPath, String remoteDir) {
+        if (remoteDir == null || remoteDir.isEmpty()) {
+            return backupPath;
+        }
+        var path = remoteDir.replace('\\', '/');
+        while (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (backupPath == null || backupPath.isEmpty() || path.startsWith(backupPath + "/") || path.equals(backupPath)) {
+            return path;
+        }
+        return backupPath + "/" + path;
+    }
+
     private static void deleteDirRecursive(DiskShare share, String path) {
         try {
             var entries = share.list(path);
@@ -128,9 +150,11 @@ public class SmbFileHelp {
                 var childPath = path + "/" + name;
                 if ((entry.getFileAttributes() & 0x10) != 0) {
                     deleteDirRecursive(share, childPath);
+                } else {
+                    try { share.rm(childPath); } catch (Exception ignored) {}
                 }
             }
-            share.rm(path);
+            share.rmdir(path, false);
         } catch (Exception ignored) {}
     }
 
@@ -138,13 +162,13 @@ public class SmbFileHelp {
 
     /** 上传本地文件到SMB共享（无进度回调），失败自动重试3次 */
     public static String upload(String localPath, String remoteDir) throws Exception {
-        Exception lastError = null;
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        var lastError = (Exception) null;
+        for (var attempt = 1; attempt <= 3; attempt++) {
             try {
                 return doUpload(localPath, remoteDir);
             } catch (Exception e) {
                 lastError = e;
-                Log.w(TAG, "SMB upload attempt " + attempt + " failed: " + e.getMessage());
+                LogHelp.w(TAG, "SMB upload attempt " + attempt + " failed: " + e.getMessage());
                 if (attempt < 3) Thread.sleep(2000);
             }
         }
@@ -167,7 +191,7 @@ public class SmbFileHelp {
 
             // try-with-resources保证异常时流和SMB文件句柄都被关闭
             try (var fis = new FileInputStream(localFile); var fos = smbFile.getOutputStream()) {
-                var total = streamCopy(fis, fos, null, 0);
+                var total = streamCopy(fis, fos);
                 return "OK: " + remotePath + " (" + total + " bytes)";
             } finally {
                 try { smbFile.close(); } catch (Exception ignored) {}
@@ -177,14 +201,14 @@ public class SmbFileHelp {
 
     /** 上传文件到SMB并实时回调进度（备份用），失败自动重试3次 */
     public static void uploadToSmb(String localPath, Object progressListener, String remoteDir, String taskId) throws Exception {
-        Exception lastError = null;
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        var lastError = (Exception) null;
+        for (var attempt = 1; attempt <= 3; attempt++) {
             try {
                 doUploadToSmb(localPath, progressListener, remoteDir, taskId);
                 return;
             } catch (Exception e) {
                 lastError = e;
-                Log.w(TAG, "SMB upload attempt " + attempt + " failed: " + e.getMessage());
+                LogHelp.w(TAG, "SMB upload attempt " + attempt + " failed: " + e.getMessage());
                 if (attempt < 3) Thread.sleep(2000);
             }
         }
@@ -197,7 +221,6 @@ public class SmbFileHelp {
             if (!localFile.exists()) throw new java.io.FileNotFoundException("file not found: " + localPath);
 
             var fileSize = localFile.length();
-            invoke(progressListener, "onStart", new Class[]{String.class}, taskId);
 
             s.mkdirs(remoteDir);
             var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
@@ -220,14 +243,14 @@ public class SmbFileHelp {
                     var now = System.currentTimeMillis();
                     if (progressListener != null && (now - lastReportTime >= 200 || totalWritten == fileSize)) {
                         lastReportTime = now;
-                        invoke(progressListener, "onProgress", new Class[]{String.class, long.class, long.class}, taskId, totalWritten, fileSize);
+                        notifyProgress(progressListener, taskId, totalWritten, fileSize);
                     }
                 }
             } finally {
                 try { smbFile.close(); } catch (Exception ignored) {}
             }
 
-            invoke(progressListener, "onFinish", new Class[]{String.class, int.class, String.class}, taskId, 0, "success");
+            notifyFinish(progressListener, taskId, 0, "success");
         }
     }
 
@@ -249,7 +272,7 @@ public class SmbFileHelp {
 
             // try-with-resources保证异常时输入输出流和SMB文件句柄都被关闭
             try (var is = smbFile.getInputStream(); var fos = new FileOutputStream(localFile)) {
-                var total = streamCopy(is, fos, null, 0);
+                var total = streamCopy(is, fos);
                 return "OK: " + remotePath + " -> " + localPath + " (" + total + " bytes)";
             } finally {
                 try { smbFile.close(); } catch (Exception ignored) {}
@@ -344,7 +367,7 @@ public class SmbFileHelp {
                     // try-with-resources保证异常时输入输出流和SMB文件句柄都被关闭
                     var localFile = new java.io.File(localDir, "descript.xml");
                     try (var is = smbFile.getInputStream(); var fos = new FileOutputStream(localFile)) {
-                        streamCopy(is, fos, null, 0);
+                        streamCopy(is, fos);
                     } finally {
                         try { smbFile.close(); } catch (Exception ignored) {}
                     }
@@ -363,8 +386,7 @@ public class SmbFileHelp {
     // ========== 工具方法 ==========
 
     /** 流拷贝（不负责关闭流，由调用方用try-with-resources管理） */
-    private static long streamCopy(java.io.InputStream in, java.io.OutputStream out,
-                                    Object progressListener, long totalSize) throws Exception {
+    private static long streamCopy(java.io.InputStream in, java.io.OutputStream out) throws Exception {
         var buffer = new byte[BUFFER_SIZE];
         var total = 0L;
         var bytesRead = 0;
@@ -376,11 +398,39 @@ public class SmbFileHelp {
         return total;
     }
 
-    /** 反射调用进度回调方法，异常静默忽略 */
-    private static void invoke(Object obj, String method, Class<?>[] types, Object... args) {
-        if (obj == null) return;
+    /** IFileOperationProgressListener回调：通知进度 */
+    private static void notifyProgress(Object listener, String taskId, long current, long total) {
+        if (listener == null) return;
+        invokeProgress(listener, "D0", new Class[]{String.class, long.class, long.class}, taskId, current, total);
+    }
+
+    /** IFileOperationProgressListener回调：通知完成 */
+    private static void notifyFinish(Object listener, String taskId, int code, String msg) {
+        if (listener == null) return;
+        invokeProgress(listener, "l0", new Class[]{String.class, int.class, String.class}, taskId, code, msg);
+    }
+
+    /** 兼容新版混淆名和旧版明文名，按参数签名兜底查找回调方法 */
+    private static void invokeProgress(Object listener, String method, Class<?>[] types, Object... args) {
         try {
-            obj.getClass().getMethod(method, types).invoke(obj, args);
-        } catch (Exception ignored) {}
+            listener.getClass().getMethod(method, types).invoke(listener, args);
+        } catch (Exception e) {
+            try {
+                for (var m : listener.getClass().getMethods()) {
+                    if (m.getParameterCount() != types.length || m.getReturnType() != void.class) continue;
+                    var matched = true;
+                    for (var i = 0; i < types.length; i++) {
+                        if (m.getParameterTypes()[i] != types[i]) {
+                            matched = false;
+                            break;
+                        }
+                    }
+                    if (matched) {
+                        m.invoke(listener, args);
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
     }
 }

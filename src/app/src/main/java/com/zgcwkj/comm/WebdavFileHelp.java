@@ -1,10 +1,10 @@
 package com.zgcwkj.comm;
 
-import android.util.Log;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -14,7 +14,6 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
-import okhttp3.Response;
 
 /**
  * WebDAV文件操作工具类
@@ -80,6 +79,25 @@ public class WebdavFileHelp {
         return builder;
     }
 
+    /** 按URL路径段编码，避免中文备份文件名在WebDAV GET/PUT时被服务器拒绝 */
+    private static String remoteUrl(String remotePath) {
+        var base = baseUrl();
+        if (remotePath == null || remotePath.isEmpty()) {
+            return base;
+        }
+        var encoded = new StringBuilder();
+        for (var part : remotePath.split("/")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (encoded.length() > 0) {
+                encoded.append("/");
+            }
+            encoded.append(URLEncoder.encode(part, StandardCharsets.UTF_8).replace("+", "%20"));
+        }
+        return base + encoded;
+    }
+
     /** 执行PROPFIND请求，返回[状态码, 响应XML] */
     private static String[] propfind(String url, int depth) throws Exception {
         var body = RequestBody.create(XML, XML_BODY);
@@ -136,6 +154,38 @@ public class WebdavFileHelp {
         return names;
     }
 
+    /** 列出指定WebDAV目录下的文件条目，路径相对于WebDAV根URL */
+    public static List<CloudFileHelp.RemoteEntry> listEntries(String path) throws Exception {
+        var entries = new ArrayList<CloudFileHelp.RemoteEntry>();
+        var url = baseUrl() + path;
+        if (!url.endsWith("/")) url += "/";
+        var xml = propfind(url, 1)[1];
+        var responsePattern = Pattern.compile("<\\w*:?response[\\s\\S]*?</\\w*:?response>", Pattern.CASE_INSENSITIVE);
+        var hrefPattern = Pattern.compile("<\\w*:?href>([^<]+)</\\w*:?href>", Pattern.CASE_INSENSITIVE);
+        var lengthPattern = Pattern.compile("<\\w*:?getcontentlength>(\\d+)</\\w*:?getcontentlength>", Pattern.CASE_INSENSITIVE);
+        var dirPattern = Pattern.compile("<\\w*:?collection\\s*/?>", Pattern.CASE_INSENSITIVE);
+        var matcher = responsePattern.matcher(xml);
+        var first = true;
+        while (matcher.find()) {
+            var block = matcher.group();
+            var hrefMatcher = hrefPattern.matcher(block);
+            if (!hrefMatcher.find()) continue;
+            var href = hrefMatcher.group(1).replaceAll("/$", "");
+            var lastSlash = href.lastIndexOf('/');
+            var name = lastSlash >= 0 ? href.substring(lastSlash + 1) : href;
+            if (name.isEmpty()) continue;
+            if (first) {
+                first = false;
+                continue;
+            }
+            var lengthMatcher = lengthPattern.matcher(block);
+            var isDir = dirPattern.matcher(block).find();
+            var size = (!isDir && lengthMatcher.find()) ? Long.parseLong(lengthMatcher.group(1)) : 0L;
+            entries.add(new CloudFileHelp.RemoteEntry(name, size, isDir, System.currentTimeMillis()));
+        }
+        return entries;
+    }
+
     /** 创建远程目录（MKCOL） */
     public static void mkdir(String path) throws Exception {
         var url = baseUrl() + path;
@@ -164,7 +214,7 @@ public class WebdavFileHelp {
         var url = baseUrl() + remoteDir;
         if (!url.endsWith("/")) url += "/";
         var request = newRequest(url).method("DELETE", null).build();
-        int code;
+        var code = 0;
         try (var resp = getClient().newCall(request).execute()) {
             code = resp.code();
         }
@@ -198,7 +248,7 @@ public class WebdavFileHelp {
         mkdirs(remoteDir);
         var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
         var requestBody = RequestBody.create(MediaType.parse("application/octet-stream"), localFile);
-        var request = newRequest(baseUrl() + remotePath).put(requestBody).build();
+        var request = newRequest(remoteUrl(remotePath)).put(requestBody).build();
         try (var resp = getClient().newCall(request).execute()) {
             var code = resp.code();
             if (code >= 200 && code < 300) {
@@ -214,7 +264,6 @@ public class WebdavFileHelp {
         if (!localFile.exists()) throw new java.io.FileNotFoundException("file not found: " + localPath);
 
         var fileSize = localFile.length();
-        invoke(progressListener, "onStart", new Class[]{String.class}, taskId);
 
         mkdirs(remoteDir);
         var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
@@ -222,13 +271,15 @@ public class WebdavFileHelp {
         // try-with-resources保证异常时fis被关闭，避免文件句柄泄漏
         try (var fis = new FileInputStream(localFile)) {
             var progressBody = new ProgressRequestBody(fis, fileSize, progressListener, taskId);
-            var request = newRequest(baseUrl() + remotePath).put(progressBody).build();
+            var request = newRequest(remoteUrl(remotePath)).put(progressBody).build();
             try (var resp = getClient().newCall(request).execute()) {
                 var code = resp.code();
+                // 必须消费response body，否则OkHttp关闭连接时会抛出EIO异常
+                if (resp.body() != null) resp.body().string();
                 if (code >= 200 && code < 300) {
-                    invoke(progressListener, "onFinish", new Class[]{String.class, int.class, String.class}, taskId, 0, "success");
+                    notifyFinish(progressListener, taskId, 0, "success");
                 } else {
-                    invoke(progressListener, "onFinish", new Class[]{String.class, int.class, String.class}, taskId, -1, "HTTP " + code);
+                    notifyFinish(progressListener, taskId, -1, "HTTP " + code);
                 }
             }
         }
@@ -268,7 +319,8 @@ public class WebdavFileHelp {
                     var now = System.currentTimeMillis();
                     if (listener != null && (now - lastReportTime >= 200 || totalWritten == totalSize)) {
                         lastReportTime = now;
-                        invoke(listener, "onProgress", new Class[]{String.class, long.class, long.class}, taskId, totalWritten, totalSize);
+                        // IFileOperationProgressListener.onProgress
+                        notifyProgress(listener, taskId, totalWritten, totalSize);
                     }
                 }
             }
@@ -279,7 +331,7 @@ public class WebdavFileHelp {
 
     /** 下载单个文件从WebDAV到本地 */
     public static String downloadFile(String remotePath, String localPath) throws Exception {
-        var request = newRequest(baseUrl() + remotePath).get().build();
+        var request = newRequest(remoteUrl(remotePath)).get().build();
         try (var resp = getClient().newCall(request).execute()) {
             var code = resp.code();
             if (code != 200) return "ERROR: HTTP " + code;
@@ -388,8 +440,39 @@ public class WebdavFileHelp {
         return total;
     }
 
-    private static void invoke(Object obj, String method, Class<?>[] types, Object... args) {
-        if (obj == null) return;
-        try { obj.getClass().getMethod(method, types).invoke(obj, args); } catch (Exception ignored) {}
+    /** IFileOperationProgressListener回调：通知进度 */
+    private static void notifyProgress(Object listener, String taskId, long current, long total) {
+        if (listener == null) return;
+        invokeProgress(listener, "D0", new Class[]{String.class, long.class, long.class}, taskId, current, total);
+    }
+
+    /** IFileOperationProgressListener回调：通知完成 */
+    private static void notifyFinish(Object listener, String taskId, int code, String msg) {
+        if (listener == null) return;
+        invokeProgress(listener, "l0", new Class[]{String.class, int.class, String.class}, taskId, code, msg);
+    }
+
+    /** 兼容新版混淆名和旧版明文名，按参数签名兜底查找回调方法 */
+    private static void invokeProgress(Object listener, String method, Class<?>[] types, Object... args) {
+        try {
+            listener.getClass().getMethod(method, types).invoke(listener, args);
+        } catch (Exception e) {
+            try {
+                for (var m : listener.getClass().getMethods()) {
+                    if (m.getParameterCount() != types.length || m.getReturnType() != void.class) continue;
+                    var matched = true;
+                    for (var i = 0; i < types.length; i++) {
+                        if (m.getParameterTypes()[i] != types[i]) {
+                            matched = false;
+                            break;
+                        }
+                    }
+                    if (matched) {
+                        m.invoke(listener, args);
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
     }
 }

@@ -11,8 +11,8 @@ android {
         applicationId "com.zgcwkj.xpmibackup"
         minSdk 28
         targetSdk 36
-        versionCode 260707
-        versionName "1.0"
+        versionCode 260711
+        versionName "1.1"
     }
 
     buildTypes {

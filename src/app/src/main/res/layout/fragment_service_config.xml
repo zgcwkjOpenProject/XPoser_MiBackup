@@ -32,7 +32,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="20dp">
+            android:layout_marginBottom="16dp">
 
             <RadioButton
                 android:id="@+id/rb_smb"
@@ -50,6 +50,26 @@
                 android:text="WebDAV"
                 android:textColor="@color/text_primary" />
         </RadioGroup>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="上传线程数"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/et_upload_threads"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="3"
+            android:inputType="number"
+            android:textColor="@color/text_primary"
+            android:background="@color/surface"
+            android:textColorHint="@color/text_hint"
+            android:padding="12dp"
+            android:layout_marginBottom="20dp" />
 
         <!-- SMB配置面板 -->
         <LinearLayout
@@ -240,8 +260,30 @@
             android:id="@+id/btn_save"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="保存配置"
+            android:text="测试并保存配置"
             android:backgroundTint="@color/primary" />
+
+        <LinearLayout
+            android:id="@+id/testing_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone"
+            android:layout_marginTop="12dp">
+
+            <ProgressBar
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="正在测试连接…"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tv_footer"
