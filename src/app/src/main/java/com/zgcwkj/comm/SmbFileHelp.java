@@ -10,6 +10,8 @@ import com.hierynomus.smbj.SmbConfig;
 import com.hierynomus.smbj.auth.AuthenticationContext;
 import com.hierynomus.smbj.share.DiskShare;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
@@ -126,7 +128,7 @@ public class SmbFileHelp {
     }
 
     /** 递归删除SMB目录 */
-    /** 兼容完整云端路径和相对备份目录名两种删除调用。 */
+    /** 兼容完整云端路径和相对备份目录名两种删除调用 */
     private static String normalizeDeletePath(String backupPath, String remoteDir) {
         if (remoteDir == null || remoteDir.isEmpty()) {
             return backupPath;
@@ -177,8 +179,8 @@ public class SmbFileHelp {
 
     private static String doUpload(String localPath, String remoteDir) throws Exception {
         try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
-            var localFile = new java.io.File(localPath);
-            if (!localFile.exists()) throw new java.io.FileNotFoundException("file not found: " + localPath);
+            var localFile = new File(localPath);
+            if (!localFile.exists()) throw new FileNotFoundException("file not found: " + localPath);
 
             s.mkdirs(remoteDir);
             var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
@@ -217,8 +219,8 @@ public class SmbFileHelp {
 
     private static void doUploadToSmb(String localPath, Object progressListener, String remoteDir, String taskId) throws Exception {
         try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
-            var localFile = new java.io.File(localPath);
-            if (!localFile.exists()) throw new java.io.FileNotFoundException("file not found: " + localPath);
+            var localFile = new File(localPath);
+            if (!localFile.exists()) throw new FileNotFoundException("file not found: " + localPath);
 
             var fileSize = localFile.length();
 
@@ -266,7 +268,7 @@ public class SmbFileHelp {
                 SMB2CreateDisposition.FILE_OPEN,
                 EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
 
-            var localFile = new java.io.File(localPath);
+            var localFile = new File(localPath);
             var parent = localFile.getParentFile();
             if (parent != null) parent.mkdirs();
 
@@ -282,13 +284,13 @@ public class SmbFileHelp {
 
     /** 从SMB下载单个恢复文件到本地（根据文件名推断路径） */
     public static void downloadFromSmb(String localPath) throws Exception {
-        var localFile = new java.io.File(localPath);
+        var localFile = new File(localPath);
         var dirName = localFile.getParentFile().getName();
         var fileName = localFile.getName();
         var backupPath = ConfigHelp.getString("backup_path", "");
 
         if (fileName.equals("restoring")) {
-            var descriptFile = new java.io.File(localFile.getParent(), "descript.xml");
+            var descriptFile = new File(localFile.getParent(), "descript.xml");
             if (descriptFile.exists()) {
                 var content = new String(java.nio.file.Files.readAllBytes(descriptFile.toPath()));
                 var idx = content.indexOf("<bakFile>");
@@ -354,7 +356,7 @@ public class SmbFileHelp {
             var result = new StringBuilder();
             for (var dirName : backupDirs) {
                 try {
-                    var localDir = new java.io.File(localTempPath, dirName);
+                    var localDir = new File(localTempPath, dirName);
                     localDir.mkdirs();
 
                     var smbFile = s.share.openFile(s.backupPath + "/" + dirName + "/descript.xml",
@@ -365,14 +367,14 @@ public class SmbFileHelp {
                         EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
 
                     // try-with-resources保证异常时输入输出流和SMB文件句柄都被关闭
-                    var localFile = new java.io.File(localDir, "descript.xml");
+                    var localFile = new File(localDir, "descript.xml");
                     try (var is = smbFile.getInputStream(); var fos = new FileOutputStream(localFile)) {
                         streamCopy(is, fos);
                     } finally {
                         try { smbFile.close(); } catch (Exception ignored) {}
                     }
 
-                    var rstFile = new java.io.File(localDir, "restoring");
+                    var rstFile = new File(localDir, "restoring");
                     if (!rstFile.exists()) rstFile.createNewFile();
 
                     if (result.length() > 0) result.append(",");

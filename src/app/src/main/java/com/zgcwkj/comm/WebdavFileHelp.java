@@ -1,6 +1,7 @@
 package com.zgcwkj.comm;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.net.URLEncoder;
@@ -244,7 +245,7 @@ public class WebdavFileHelp {
     /** 上传本地文件到WebDAV（无进度回调） */
     public static String upload(String localPath, String remoteDir) throws Exception {
         var localFile = new File(localPath);
-        if (!localFile.exists()) throw new java.io.FileNotFoundException("file not found: " + localPath);
+        if (!localFile.exists()) throw new FileNotFoundException("file not found: " + localPath);
         mkdirs(remoteDir);
         var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
         var requestBody = RequestBody.create(MediaType.parse("application/octet-stream"), localFile);
@@ -261,7 +262,7 @@ public class WebdavFileHelp {
     /** 上传文件并回调进度（备份用） */
     public static void uploadToWebdav(String localPath, Object progressListener, String remoteDir, String taskId) throws Exception {
         var localFile = new File(localPath);
-        if (!localFile.exists()) throw new java.io.FileNotFoundException("file not found: " + localPath);
+        if (!localFile.exists()) throw new FileNotFoundException("file not found: " + localPath);
 
         var fileSize = localFile.length();
 

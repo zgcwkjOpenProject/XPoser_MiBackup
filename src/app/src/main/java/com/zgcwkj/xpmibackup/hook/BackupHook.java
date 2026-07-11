@@ -6,7 +6,6 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.ContextWrapper;
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import com.zgcwkj.comm.CloudFileHelp;
@@ -23,7 +22,7 @@ import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
- * 处理小米备份应用自身页面行为，不放入AIDL重定向逻辑。
+ * 处理小米备份应用自身页面行为，不放入AIDL重定向逻辑
  */
 public class BackupHook {
     private static final String TAG = "XpMiBackup";
@@ -32,10 +31,11 @@ public class BackupHook {
     private static final int NOTIFICATION_ID_SUSPEND = 2131886137;
     private static final ThreadLocal<Boolean> closingProgressPage = ThreadLocal.withInitial(() -> Boolean.FALSE);
     private static final Set<String> activeBackupDirs = Collections.synchronizedSet(new LinkedHashSet<>());
+    private static volatile boolean activeBackupInProgress;
     private static final WeakHashMap<Object, Object> nasRecyclerViews = new WeakHashMap<>();
 
     /**
-     * 安装备份应用页面相关Hook。
+     * 安装备份应用页面相关Hook
      */
     public void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         hookFinishButtonClick();
@@ -47,13 +47,13 @@ public class BackupHook {
     }
 
     /**
-     * 按关闭按钮的资源ID包装点击事件，直接关闭任务栈，避免原逻辑跳回密码页。
+     * 按关闭按钮的资源ID包装点击事件，直接关闭任务栈，避免原逻辑跳回密码页
      */
     private void hookFinishButtonClick() {
         try {
             XposedHelpers.findAndHookMethod(View.class, "setOnClickListener", View.OnClickListener.class, new XC_MethodHook() {
                 /**
-                 * 关闭按钮绑定监听时替换为代理监听，避免依赖混淆方法名。
+                 * 关闭按钮绑定监听时替换为代理监听，避免依赖混淆方法名
                  */
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -70,7 +70,7 @@ public class BackupHook {
     }
 
     /**
-     * 判断当前View是否为备份进度页的完成或退出按钮。
+     * 判断当前View是否为备份进度页的完成或退出按钮
      */
     private static boolean isCloseButton(View view) {
         if (view == null || view.getId() == View.NO_ID) {
@@ -85,7 +85,7 @@ public class BackupHook {
     }
 
     /**
-     * Hook NAS进度列表适配器，让当前备份项开始时滚动到对应位置。
+     * Hook NAS进度列表适配器，让当前备份项开始时滚动到对应位置
      */
     private void hookNasTransferAdapterScroll(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -100,14 +100,14 @@ public class BackupHook {
     }
 
     /**
-     * 从RecyclerView设置Adapter的公开入口记录NAS列表，兼容新版Adapter没有重写附着方法的情况。
+     * 从RecyclerView设置Adapter的公开入口记录NAS列表，兼容新版Adapter没有重写附着方法的情况
      */
     private void hookRecyclerViewSetAdapter(Class<?> adapterClass, Class<?> recyclerViewClass) {
         try {
             var recyclerAdapterClass = XposedHelpers.findClass("androidx.recyclerview.widget.RecyclerView$Adapter", recyclerViewClass.getClassLoader());
             XposedHelpers.findAndHookMethod(recyclerViewClass, "setAdapter", recyclerAdapterClass, new XC_MethodHook() {
                 /**
-                 * RecyclerView绑定NAS Adapter时保存映射，其它Adapter直接忽略。
+                 * RecyclerView绑定NAS Adapter时保存映射，其它Adapter直接忽略
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -125,14 +125,14 @@ public class BackupHook {
     }
 
     /**
-     * Hook进度页接收NAS开始事件的公开回调，确保UI线程更新后再尝试滚动当前项。
+     * Hook进度页接收NAS开始事件的公开回调，确保UI线程更新后再尝试滚动当前项
      */
     private void hookNasTransferListener(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             var listenerClass = XposedHelpers.findClass("com.miui.backup.activity.ProgressPageFragmentBase$1", lpparam.classLoader);
             XposedHelpers.findAndHookMethod(listenerClass, "onItemTaskStart", String.class, Integer.TYPE, new XC_MethodHook() {
                 /**
-                 * 原回调会投递UI更新，这里再投递一次滚动，避免刷新和滚动顺序相反。
+                 * 原回调会投递UI更新，这里再投递一次滚动，避免刷新和滚动顺序相反
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -145,13 +145,13 @@ public class BackupHook {
     }
 
     /**
-     * Hook旧版公开itemStart开始事件方法，作为监听回调之外的滚动兜底。
+     * Hook旧版公开itemStart开始事件方法，作为监听回调之外的滚动兜底
      */
     private void hookAdapterItemStart(Class<?> adapterClass) {
         try {
             XposedHelpers.findAndHookMethod(adapterClass, "itemStart", String.class, Integer.TYPE, new XC_MethodHook() {
                 /**
-                 * 原方法更新状态后滚动到当前任务位置。
+                 * 原方法更新状态后滚动到当前任务位置
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -162,7 +162,7 @@ public class BackupHook {
     }
 
     /**
-     * 根据任务包名和feature查找列表下标，并让RecyclerView滚动过去。
+     * 根据任务包名和feature查找列表下标，并让RecyclerView滚动过去
      */
     private static void scrollNasRecyclerToTask(Object adapter, String packageName, int feature) {
         try {
@@ -177,7 +177,7 @@ public class BackupHook {
     }
 
     /**
-     * 对当前页面所有NAS列表投递滚动任务，用于监听回调先于Adapter刷新完成的场景。
+     * 对当前页面所有NAS列表投递滚动任务，用于监听回调先于Adapter刷新完成的场景
      */
     private static void postScrollAllNasRecycler(String packageName, int feature) {
         synchronized (nasRecyclerViews) {
@@ -188,13 +188,13 @@ public class BackupHook {
     }
 
     /**
-     * 在RecyclerView消息队列中执行滚动，确保notifyItemChanged之后布局状态稳定。
+     * 在RecyclerView消息队列中执行滚动，确保notifyItemChanged之后布局状态稳定
      */
     private static void scrollRecyclerToPosition(Object recyclerView, int index) {
         if (recyclerView instanceof View) {
             ((View) recyclerView).post(new Runnable() {
                 /**
-                 * 让RecyclerView平滑滚动到当前备份项位置。
+                 * 让RecyclerView平滑滚动到当前备份项位置
                  */
                 @Override
                 public void run() {
@@ -211,7 +211,7 @@ public class BackupHook {
     }
 
     /**
-     * 读取Adapter当前附着的RecyclerView。
+     * 读取Adapter当前附着的RecyclerView
      */
     private static Object getNasRecyclerView(Object adapter) {
         synchronized (nasRecyclerViews) {
@@ -220,7 +220,7 @@ public class BackupHook {
     }
 
     /**
-     * 从NASTransferAdapter数据列表中查找任务下标。
+     * 从NASTransferAdapter数据列表中查找任务下标
      */
     private static int findAdapterTaskIndex(Object adapter, String packageName, int feature) throws Exception {
         var data = findTaskList(adapter);
@@ -237,7 +237,7 @@ public class BackupHook {
     }
 
     /**
-     * 兼容旧版mDataList和新版混淆字段，找出Adapter里的TaskItem列表。
+     * 兼容旧版mDataList和新版混淆字段，找出Adapter里的TaskItem列表
      */
     private static List<?> findTaskList(Object adapter) throws Exception {
         for (var fieldName : new String[]{"mDataList", "f1679f"}) {
@@ -259,30 +259,30 @@ public class BackupHook {
     }
 
     /**
-     * 代理关闭按钮点击，直接关闭整个任务栈。
+     * 代理关闭按钮点击，直接关闭整个任务栈
      */
     private static class CloseClickListener implements View.OnClickListener {
         /**
-         * 点击完成或退出按钮后关闭任务栈。
+         * 点击完成或退出按钮后关闭任务栈
          */
         @Override
         public void onClick(View view) {
             var activity = findActivity(view == null ? null : view.getContext());
             cancelBackupNotifications(activity);
-            launchHome(activity);
             closeProgressTask(activity);
+            killCurrentProcessSoon();
         }
     }
 
     /**
-     * 只替换连接断开导致的暂停通知，保留其它备份通知。
+     * 只替换连接断开导致的暂停通知，保留其它备份通知
      */
     private void hookSuspendNotification(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             var notificationUtilsClass = XposedHelpers.findClass("com.miui.backup.NotificationUtils", lpparam.classLoader);
             XposedHelpers.findAndHookMethod(notificationUtilsClass, "d", Context.class, Class.class, Integer.TYPE, new XC_MethodHook() {
                 /**
-                 * 连接断开的暂停通知会误导用户，这里换回当前进度通知。
+                 * 连接断开的暂停通知会误导用户，这里换回当前进度通知
                  */
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -298,13 +298,13 @@ public class BackupHook {
     }
 
     /**
-     * Hook通知发送入口，拦截恢复完成和连接断开的暂停通知。
+     * Hook通知发送入口，拦截恢复完成和连接断开的暂停通知
      */
     private void hookBackupNotifications() {
         try {
             var hook = new XC_MethodHook() {
                 /**
-                 * 小米备份进程发送通知前，按通知ID和内容判断是否需要拦截。
+                 * 小米备份进程发送通知前，按通知ID和内容判断是否需要拦截
                  */
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -324,13 +324,13 @@ public class BackupHook {
     }
 
     /**
-     * Hook前台服务退出入口，清掉恢复结束后残留的前台服务通知。
+     * Hook前台服务退出入口，清掉恢复结束后残留的前台服务通知
      */
     private void hookForegroundNotificationStop() {
         try {
             var hook = new XC_MethodHook() {
                 /**
-                 * 服务退出前台状态后再取消通知，避免运行过程中误清前台服务通知。
+                 * 服务退出前台状态后再取消通知，避免运行过程中误清前台服务通知
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
@@ -347,7 +347,7 @@ public class BackupHook {
     }
 
     /**
-     * 判断当前通知是否应该被拦截。
+     * 判断当前通知是否应该被拦截
      */
     private static boolean shouldDropBackupNotification(int id, Notification notification) {
         if (id == NOTIFICATION_ID_SUSPEND) {
@@ -357,7 +357,7 @@ public class BackupHook {
     }
 
     /**
-     * 通过标题和内容判断是否为恢复结果通知，避免误拦备份完成通知。
+     * 通过标题和内容判断是否为恢复结果通知，避免误拦备份完成通知
      */
     private static boolean isRestoreNotification(Notification notification) {
         if (notification == null) {
@@ -371,7 +371,7 @@ public class BackupHook {
     }
 
     /**
-     * 从通知附加数据里读取文本字段。
+     * 从通知附加数据里读取文本字段
      */
     private static String readNotificationText(Bundle extras, String key) {
         if (extras == null) {
@@ -382,7 +382,7 @@ public class BackupHook {
     }
 
     /**
-     * Hook NAS取消入口，备份中途取消时清理已经写到云端的半成品目录。
+     * Hook NAS取消入口，备份中途取消时清理已经写到云端的半成品目录
      */
     private void hookNasAbort(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -393,7 +393,7 @@ public class BackupHook {
     }
 
     /**
-     * Hook旧版/新版INASTransferService Stub里的取消方法。
+     * Hook旧版/新版INASTransferService Stub里的取消方法
      */
     private void hookStubAbortMethods(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -406,13 +406,13 @@ public class BackupHook {
     }
 
     /**
-     * 对无参数取消方法安装前置清理逻辑。
+     * 对无参数取消方法安装前置清理逻辑
      */
     private void hookNoArgMethod(Class<?> clazz, String methodName) {
         try {
             XposedHelpers.findAndHookMethod(clazz, methodName, new XC_MethodHook() {
                 /**
-                 * 原备份取消逻辑执行前先删除云端半成品，避免任务ID映射随后被清空。
+                 * 原备份取消逻辑执行前先删除云端半成品，避免任务ID映射随后被清空
                  */
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -423,7 +423,7 @@ public class BackupHook {
     }
 
     /**
-     * 复用备份应用自己的通知构建方法，避免返回空通知导致系统notify异常。
+     * 复用备份应用自己的通知构建方法，避免返回空通知导致系统notify异常
      */
     private static Notification buildCurrentProgressNotification(Class<?> notificationUtilsClass, Context context, Class<?> targetClass) {
         try {
@@ -435,7 +435,7 @@ public class BackupHook {
     }
 
     /**
-     * 在AIDL上传开始时同步通知进度页当前备份项，恢复列表自动滚动到正在处理的项目。
+     * 在AIDL上传开始时同步通知进度页当前备份项，恢复列表自动滚动到正在处理的项目
      */
     public static void notifyNasItemTaskStart(Object progressListener, String taskId) {
         if (progressListener == null || taskId == null) {
@@ -459,34 +459,41 @@ public class BackupHook {
     }
 
     /**
-     * 记录本次备份已经创建或即将创建的云端目录，取消时用于清理残留。
+     * 记录本次备份已经创建或即将创建的云端目录，取消时用于清理残留
      */
     public static void recordActiveBackupDir(String remoteDir) {
         if (remoteDir == null || remoteDir.isEmpty()) {
             return;
         }
+        activeBackupInProgress = true;
         activeBackupDirs.add(remoteDir);
     }
 
     /**
-     * 正常完成后清空取消清理队列，避免后续误删已经成功的备份。
+     * 正常完成后清空取消清理队列，避免后续误删已经成功的备份
      */
     public static void clearActiveBackupDirs() {
+        activeBackupInProgress = false;
         activeBackupDirs.clear();
     }
 
     /**
-     * 异步删除本次备份已经上传到云端的半成品目录。
+     * 异步删除本次备份已经上传到云端的半成品目录
      */
     private static void cleanupActiveBackupDirsAsync() {
-        var dirs = snapshotActiveBackupDirs();
-        if (dirs.isEmpty()) {
+        if (!activeBackupInProgress) {
             return;
         }
+        var dirs = snapshotActiveBackupDirs();
+        if (dirs.isEmpty()) {
+            activeBackupInProgress = false;
+            return;
+        }
+        activeBackupInProgress = false;
         activeBackupDirs.clear();
-        new Thread(new Runnable() {
+        runAsync("cleanup-backup", new Runnable() {
             /**
-             * 在后台执行云端删除，避免阻塞小米备份自己的取消流程。
+             * 在后台执行云端删除，避免阻塞小米备份自己的取消流程
              */
             @Override
             public void run() {
@@ -494,11 +501,11 @@ public class BackupHook {
                     CloudFileHelp.deleteRemoteDir(dir);
                 }
             }
-        }).start();
+        });
     }
 
     /**
-     * 拷贝当前待清理目录集合，避免删除时持有集合锁。
+     * 拷贝当前待清理目录集合，避免删除时持有集合锁
      */
     private static Set<String> snapshotActiveBackupDirs() {
         synchronized (activeBackupDirs) {
@@ -507,7 +514,7 @@ public class BackupHook {
     }
 
     /**
-     * 从IFileOperationProgressListener内部类取回外部NASTransferService实例。
+     * 从IFileOperationProgressListener内部类取回外部NASTransferService实例
      */
     private static Object findNasTransferService(Object progressListener) throws IllegalAccessException {
         for (var field : progressListener.getClass().getDeclaredFields()) {
@@ -521,7 +528,7 @@ public class BackupHook {
     }
 
     /**
-     * 根据DFS任务ID从NASBackupDataCenter中找到对应的TaskItem。
+     * 根据DFS任务ID从NASBackupDataCenter中找到对应的TaskItem
      */
     private static Object findTaskItem(ClassLoader classLoader, String taskId) throws Exception {
         var dataCenterClass = XposedHelpers.findClass("com.miui.backup.nas.NASBackupDataCenter", classLoader);
@@ -537,7 +544,7 @@ public class BackupHook {
     }
 
     /**
-     * 兼容旧版getInstance和新版混淆后的单例方法。
+     * 兼容旧版getInstance和新版混淆后的单例方法
      */
     private static Object getDataCenterInstance(Class<?> dataCenterClass) throws Exception {
         try {
@@ -548,7 +555,7 @@ public class BackupHook {
     }
 
     /**
-     * 兼容旧版SafeTaskIdMapGet和新版混淆后的任务ID索引查询方法。
+     * 兼容旧版SafeTaskIdMapGet和新版混淆后的任务ID索引查询方法
      */
     private static int getTaskIndex(Object dataCenter, String taskId) throws Exception {
         for (var methodName : new String[]{"SafeTaskIdMapGet", "b"}) {
@@ -566,7 +573,7 @@ public class BackupHook {
     }
 
     /**
-     * 兼容旧版getItemByIndexSafe和新版混淆后的TaskItem查询方法。
+     * 兼容旧版getItemByIndexSafe和新版混淆后的TaskItem查询方法
      */
     private static Object getTaskItem(Object dataCenter, int index) throws Exception {
         for (var methodName : new String[]{"getItemByIndexSafe", "j"}) {
@@ -584,7 +591,7 @@ public class BackupHook {
     }
 
     /**
-     * 判断方法是否是单个指定参数并返回int。
+     * 判断方法是否是单个指定参数并返回int
      */
     private static boolean isIntMethod(Method method, Class<?> argType) {
         var types = method.getParameterTypes();
@@ -592,7 +599,7 @@ public class BackupHook {
     }
 
     /**
-     * 判断方法是否是按索引返回TaskItem。
+     * 判断方法是否是按索引返回TaskItem
      */
     private static boolean isTaskItemMethod(Method method) {
         var types = method.getParameterTypes();
@@ -600,7 +607,7 @@ public class BackupHook {
     }
 
     /**
-     * 调用NASTransferService自己的开始事件广播，让进度页按原逻辑滚动到当前项。
+     * 调用NASTransferService自己的开始事件广播，让进度页按原逻辑滚动到当前项
      */
     private static void invokeNasItemTaskStart(Object service, String packageName, int feature) throws Exception {
         if (packageName == null) {
@@ -622,7 +629,7 @@ public class BackupHook {
     }
 
     /**
-     * 判断方法参数是否完全匹配。
+     * 判断方法参数是否完全匹配
      */
     private static boolean isMethod(Method method, Class<?>... expectedTypes) {
         var types = method.getParameterTypes();
@@ -638,7 +645,7 @@ public class BackupHook {
     }
 
     /**
-     * 读取对象字段，优先按名称读取，避免依赖字段顺序。
+     * 读取对象字段，优先按名称读取，避免依赖字段顺序
      */
     private static Object readField(Object instance, String fieldName) throws Exception {
         var field = findField(instance.getClass(), fieldName);
@@ -647,7 +654,7 @@ public class BackupHook {
     }
 
     /**
-     * 在类层级中查找字段。
+     * 在类层级中查找字段
      */
     private static Field findField(Class<?> clazz, String fieldName) throws NoSuchFieldException {
         var current = clazz;
@@ -662,7 +669,7 @@ public class BackupHook {
     }
 
     /**
-     * 把进度页任务退到后台，不销毁Activity，避免ProgressPageFragmentBase.onDestroy清理通知。
+     * 移除进度页任务，让下次打开从新的入口页面开始
      */
     private static void closeProgressTask(Activity activity) {
         if (activity == null || Boolean.TRUE.equals(closingProgressPage.get())) {
@@ -670,16 +677,45 @@ public class BackupHook {
         }
         closingProgressPage.set(Boolean.TRUE);
         try {
-            activity.moveTaskToBack(true);
+            activity.finishAndRemoveTask();
         } catch (Throwable e) {
-            logError("BackupHook: move ProgressPageActivity task to back failed", e);
+            try {
+                activity.finishAffinity();
+            } catch (Throwable fallback) {
+                logError("BackupHook: close ProgressPageActivity task failed", fallback);
+            }
         } finally {
             closingProgressPage.set(Boolean.FALSE);
         }
     }
 
     /**
-     * 只清理小米备份自己的进度、完成和暂停通知，不影响系统其它通知。
+     * 等任务关闭请求发给系统后杀掉小米备份进程
+     */
+    private static void killCurrentProcessSoon() {
+        runAsync("close", new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(250);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                android.os.Process.killProcess(android.os.Process.myPid());
+                System.exit(0);
+            }
+        });
+    }
+
+    /**
+     * 在独立后台线程执行备份页面收尾任务
+     */
+    private static void runAsync(String name, Runnable runnable) {
+        new Thread(runnable, "XpMiBackup-" + name).start();
+    }
+
+    /**
+     * 只清理小米备份自己的进度、完成和暂停通知，不影响系统其它通知
      */
     private static void cancelBackupNotifications(Context context) {
         if (context == null) {
@@ -694,7 +730,7 @@ public class BackupHook {
     }
 
     /**
-     * 只清理小米备份自己的固定通知ID。
+     * 只清理小米备份自己的固定通知ID
      */
     private static void cancelBackupNotifications(NotificationManager manager) {
         if (manager == null) {
@@ -706,24 +742,7 @@ public class BackupHook {
     }
 
     /**
-     * 先回到桌面，避免原完成逻辑跳到备份密码界面。
-     */
-    private static void launchHome(Activity activity) {
-        if (activity == null) {
-            return;
-        }
-        try {
-            var intent = new Intent(Intent.ACTION_MAIN);
-            intent.addCategory(Intent.CATEGORY_HOME);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            activity.startActivity(intent);
-        } catch (Throwable e) {
-            logError("BackupHook: launch home failed", e);
-        }
-    }
-
-    /**
-     * 从View的Context链里查找宿主Activity。
+     * 从View的Context链里查找宿主Activity
      */
     private static Activity findActivity(Context context) {
         var current = context;
@@ -737,7 +756,7 @@ public class BackupHook {
     }
 
     /**
-     * 统一记录异常日志，正常路径不输出日志。
+     * 统一记录异常日志，正常路径不输出日志
      */
     private static void logError(String message, Throwable e) {
         LogHelp.e(TAG, message + ": " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);

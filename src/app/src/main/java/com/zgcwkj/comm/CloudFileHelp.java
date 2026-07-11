@@ -3,15 +3,15 @@ package com.zgcwkj.comm;
 import java.util.List;
 
 /**
- * 云端文件访问门面。
- * 根据config.ini里的协议配置，把文件操作分发到SMB或WebDAV实现。
+ * 云端文件访问门面
+ * 根据config.ini里的协议配置，把文件操作分发到SMB或WebDAV实现
  */
 public class CloudFileHelp {
 
     private static final String TAG = "XpMiBackup";
 
     /**
-     * 远端文件条目，用于AIDL层构造小米DFS的SmbFile对象。
+     * 远端文件条目，用于AIDL层构造小米DFS的SmbFile对象
      */
     public static class RemoteEntry {
         public final String name;
@@ -20,7 +20,7 @@ public class CloudFileHelp {
         public final long modifiedTime;
 
         /**
-         * 保存远端文件或目录的基础属性。
+         * 保存远端文件或目录的基础属性
          */
         public RemoteEntry(String name, long size, boolean directory, long modifiedTime) {
             this.name = name;
@@ -31,7 +31,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 测试当前配置的远端存储是否可连接。
+     * 测试当前配置的远端存储是否可连接
      */
     public static boolean testConnection() {
         var protocol = getProtocol();
@@ -44,7 +44,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 列出backup_path下面的备份目录。
+     * 列出backup_path下面的备份目录
      */
     public static List<String> listDirs() {
         try {
@@ -56,7 +56,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 列出指定远端目录下的文件和文件夹。
+     * 列出指定远端目录下的文件和文件夹
      */
     public static List<RemoteEntry> listEntries(String remoteDir) {
         try {
@@ -68,7 +68,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 上传本地文件，不回调小米DFS进度。
+     * 上传本地文件，不回调小米DFS进度
      */
     public static String upload(String localPath, String remoteDir) {
         try {
@@ -80,7 +80,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 上传备份文件，并回调小米DFS传输进度。
+     * 上传备份文件，并回调小米DFS传输进度
      */
     public static void uploadWithProgress(String localPath, Object progressListener, String remoteDir, String taskId) {
         try {
@@ -96,7 +96,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 下载单个远端文件到本地路径。
+     * 下载单个远端文件到本地路径
      */
     public static String downloadFile(String remotePath, String localPath) {
         try {
@@ -108,7 +108,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 按恢复侧本地路径推导远端路径并下载文件。
+     * 按恢复侧本地路径推导远端路径并下载文件
      */
     public static void downloadFromCloud(String localPath) {
         try {
@@ -123,7 +123,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 读取所有备份目录里的descript.xml内容。
+     * 读取所有备份目录里的descript.xml内容
      */
     public static List<String> readBackupXmls() {
         try {
@@ -135,7 +135,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 列出备份目录，并把每个descript.xml下载到本地临时目录。
+     * 列出备份目录，并把每个descript.xml下载到本地临时目录
      */
     public static String listAndDownloadXml(String localTempPath) {
         try {
@@ -147,7 +147,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 删除远端目录及其所有内容。
+     * 删除远端目录及其所有内容
      */
     public static void deleteRemoteDir(String remoteDir) {
         try {
@@ -162,7 +162,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 只保留backup_max个最新备份目录；backup_max小于等于0表示不限制。
+     * 只保留backup_max个最新备份目录；backup_max小于等于0表示不限制
      */
     public static void cleanupOldBackups() {
         try {
@@ -186,21 +186,21 @@ public class CloudFileHelp {
     }
 
     /**
-     * 从配置中读取当前协议名称。
+     * 从配置中读取当前协议名称
      */
     public static String getProtocol() {
         return ConfigHelp.getString("protocol", "smb");
     }
 
     /**
-     * 判断当前协议是否为WebDAV。
+     * 判断当前协议是否为WebDAV
      */
     private static boolean isWebdav() {
         return "webdav".equals(ConfigHelp.getString("protocol", "smb"));
     }
 
     /**
-     * 通知IFileOperationProgressListener.onFinish或混淆后的等价方法。
+     * 通知IFileOperationProgressListener.onFinish或混淆后的等价方法
      */
     private static void notifyFinish(Object listener, String taskId, int code, String msg) {
         if (listener == null) {
@@ -227,7 +227,7 @@ public class CloudFileHelp {
     }
 
     /**
-     * 统一记录云端文件操作异常。
+     * 统一记录云端文件操作异常
      */
     private static void logError(String message, Exception e) {
         LogHelp.e(TAG, message + ": " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);

@@ -30,7 +30,7 @@ import java.util.HashSet;
 import java.util.TreeMap;
 
 /**
- * 处理小米备份的 NAS 自动备份入口和调度配置。
+ * 处理小米备份的 NAS 自动备份入口和调度配置
  */
 public class AutoBackupHook {
     private static final String TAG = "XpMiBackup";
@@ -65,7 +65,7 @@ public class AutoBackupHook {
     private static boolean sharedPreferencesHooked;
 
     /**
-     * 安装 NAS 自动备份相关 Hook。
+     * 安装 NAS 自动备份相关 Hook
      */
     public void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         hookAutoBackupPreferenceWrites();
@@ -75,7 +75,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 放开 NAS 自动备份依赖的小米智能存储开关和包存在性检查。
+     * 放开 NAS 自动备份依赖的小米智能存储开关和包存在性检查
      */
     private void hookNasAutoBackupAvailability(XC_LoadPackage.LoadPackageParam lpparam) {
         hookStationSwitchQueryBundle();
@@ -85,7 +85,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 监听原生自动备份日期和时间写入，写入完成后刷新 NAS 自动备份调度。
+     * 监听原生自动备份日期和时间写入，写入完成后刷新 NAS 自动备份调度
      */
     private static synchronized void hookAutoBackupPreferenceWrites() {
         if (sharedPreferencesHooked) {
@@ -95,7 +95,7 @@ public class AutoBackupHook {
             var clazz = Class.forName("android.app.SharedPreferencesImpl$EditorImpl");
             XposedHelpers.findAndHookMethod(clazz, "putInt", String.class, int.class, new XC_MethodHook() {
                 /**
-                 * 原生控件保存日期或时间后，延迟重排 NAS Job，确保偏好已经落盘。
+                 * 原生控件保存日期或时间后，延迟重排 NAS Job，确保偏好已经落盘
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -112,7 +112,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 拦截新版 ContentResolver 查询智能存储开关，返回已开启状态。
+     * 拦截新版 ContentResolver 查询智能存储开关，返回已开启状态
      */
     private void hookStationSwitchQueryBundle() {
         try {
@@ -120,7 +120,7 @@ public class AutoBackupHook {
                 Uri.class, String[].class, Bundle.class, CancellationSignal.class,
                 new XC_MethodHook() {
                     /**
-                     * 命中智能存储开关 URI 时，返回带 switch_on=true 的空游标。
+                     * 命中智能存储开关 URI 时，返回带 switch_on=true 的空游标
                      */
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
@@ -133,7 +133,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 拦截旧版 ContentResolver 查询智能存储开关，返回已开启状态。
+     * 拦截旧版 ContentResolver 查询智能存储开关，返回已开启状态
      */
     private void hookStationSwitchQueryLegacy() {
         try {
@@ -141,7 +141,7 @@ public class AutoBackupHook {
                 Uri.class, String[].class, String.class, String[].class, String.class,
                 new XC_MethodHook() {
                     /**
-                     * 命中智能存储开关 URI 时，返回带 switch_on=true 的空游标。
+                     * 命中智能存储开关 URI 时，返回带 switch_on=true 的空游标
                      */
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
@@ -154,7 +154,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 为智能存储开关查询构造统一的返回游标。
+     * 为智能存储开关查询构造统一的返回游标
      */
     private static void setStationSwitchResult(XC_MethodHook.MethodHookParam param, Uri uri) {
         if (uri == null || !STATION_SWITCH_URI.equals(uri.toString())) {
@@ -168,7 +168,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 让 NAS 自动备份执行前的 com.xiaomi.station 安装检查通过。
+     * 让 NAS 自动备份执行前的 com.xiaomi.station 安装检查通过
      */
     private void hookStationPackageCheck(XC_LoadPackage.LoadPackageParam lpparam, String methodName) {
         try {
@@ -178,7 +178,7 @@ public class AutoBackupHook {
             }
             XposedHelpers.findAndHookMethod(clazz, methodName, Context.class, String.class, new XC_MethodHook() {
                 /**
-                 * 仅放行智能存储包名，其它包存在性检查保持原逻辑。
+                 * 仅放行智能存储包名，其它包存在性检查保持原逻辑
                  */
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
@@ -194,14 +194,14 @@ public class AutoBackupHook {
     }
 
     /**
-     * 在 NAS 自动备份任务执行结束后重新安排下一次任务。
+     * 在 NAS 自动备份任务执行结束后重新安排下一次任务
      */
     private void hookNasAutoBackupReschedule(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             var clazz = XposedHelpers.findClass(AUTO_BACKUP_SERVICE_CLASS, lpparam.classLoader);
             XposedHelpers.findAndHookMethod(clazz, "onStartJob", JobParameters.class, new XC_MethodHook() {
                 /**
-                 * 原生 JobService 返回后，根据当前配置安排下一次 NAS 自动备份。
+                 * 原生 JobService 返回后，根据当前配置安排下一次 NAS 自动备份
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -218,14 +218,14 @@ public class AutoBackupHook {
     }
 
     /**
-     * 在备份应用更多设置里追加 NAS 自动备份配置入口。
+     * 在备份应用更多设置里追加 NAS 自动备份配置入口
      */
     private void hookMoreSettingsNasAutoBackup(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             var clazz = XposedHelpers.findClass("com.miui.backup.settings.MoreSettingsFragment", lpparam.classLoader);
             XposedHelpers.findAndHookMethod(clazz, "onCreatePreferences", Bundle.class, String.class, new XC_MethodHook() {
                 /**
-                 * 原生设置加载完成后追加 NAS 自动备份分组。
+                 * 原生设置加载完成后追加 NAS 自动备份分组
                  */
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -238,7 +238,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 创建 NAS 自动备份开关和说明项，并添加到当前 PreferenceScreen。
+     * 创建 NAS 自动备份开关和说明项，并添加到当前 PreferenceScreen
      */
     private static void addNasAutoBackupPreferences(Object fragment, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -304,7 +304,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 使用目标应用类加载器创建 Preference 对象。
+     * 使用目标应用类加载器创建 Preference 对象
      */
     private static Object createPreference(String className, Context context, XC_LoadPackage.LoadPackageParam lpparam) throws Exception {
         var clazz = XposedHelpers.findClass(className, lpparam.classLoader);
@@ -312,7 +312,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 创建通用 Preference 点击监听。
+     * 创建通用 Preference 点击监听
      */
     private static Object createPreferenceClickListener(XC_LoadPackage.LoadPackageParam lpparam, PreferenceClickHandler handler) throws Exception {
         var listenerClass = XposedHelpers.findClass("androidx.preference.Preference$OnPreferenceClickListener", lpparam.classLoader);
@@ -326,7 +326,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 创建 NAS 自动备份开关监听，开关变化时写入原生偏好并调度 NAS Job。
+     * 创建 NAS 自动备份开关监听，开关变化时写入原生偏好并调度 NAS Job
      */
     private static Object createNasAutoBackupChangeListener(XC_LoadPackage.LoadPackageParam lpparam) throws Exception {
         var listenerClass = XposedHelpers.findClass("androidx.preference.Preference$OnPreferenceChangeListener", lpparam.classLoader);
@@ -347,7 +347,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 启用 NAS 自动备份，默认每天 00:30 备份所有第三方应用。
+     * 启用 NAS 自动备份，默认每天 00:30 备份所有第三方应用
      */
     private static boolean enableNasAutoBackup(Context context) {
         try {
@@ -367,7 +367,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 写入 NAS 自动备份基础偏好键，让 AutoBackupService 继续走原生 NAS 任务链路。
+     * 写入 NAS 自动备份基础偏好键，让 AutoBackupService 继续走原生 NAS 任务链路
      */
     private static void writeNasAutoBackupBasePreferences(Context context, boolean enabled, String deviceId, String deviceName) {
         var prefs = getAutoBackupPreferences(context);
@@ -391,7 +391,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 关闭 NAS 自动备份，并取消备份应用的 NAS 自动备份 Job。
+     * 关闭 NAS 自动备份，并取消备份应用的 NAS 自动备份 Job
      */
     private static boolean disableNasAutoBackup(Context context) {
         try {
@@ -405,7 +405,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 根据当前开关和配置刷新 NAS 自动备份调度。
+     * 根据当前开关和配置刷新 NAS 自动备份调度
      */
     private static void refreshNasAutoBackupSchedule(Context context) {
         if (!isNasAutoBackupEnabled(context) || getAutoBackupDate(context) == 0 || getNasBackupPackages(context).isEmpty()) {
@@ -416,14 +416,14 @@ public class AutoBackupHook {
     }
 
     /**
-     * 缓存备份应用上下文，供原生偏好写入回调异步刷新调度使用。
+     * 缓存备份应用上下文，供原生偏好写入回调异步刷新调度使用
      */
     private static void saveAppContext(Context context) {
         appContext = context.getApplicationContext() == null ? context : context.getApplicationContext();
     }
 
     /**
-     * 缓存虚拟 NAS 自动备份 Preference 引用，用于原生控件修改后同步刷新显示。
+     * 缓存虚拟 NAS 自动备份 Preference 引用，用于原生控件修改后同步刷新显示
      */
     private static void saveNasAutoBackupPreferenceRefs(Object switchPreference, Object datePreference, Object timePreference) {
         nasSwitchPreferenceRef = new WeakReference<>(switchPreference);
@@ -432,14 +432,14 @@ public class AutoBackupHook {
     }
 
     /**
-     * 判断偏好键是否会影响自动备份调度。
+     * 判断偏好键是否会影响自动备份调度
      */
     private static boolean isAutoBackupScheduleKey(String key) {
         return PREF_KEY_DATE.equals(key) || PREF_KEY_HOUR.equals(key) || PREF_KEY_MINUTE.equals(key);
     }
 
     /**
-     * 延迟刷新 NAS 自动备份调度，等待原生控件完成偏好写入。
+     * 延迟刷新 NAS 自动备份调度，等待原生控件完成偏好写入
      */
     private static void refreshNasAutoBackupScheduleDelayed() {
         if (appContext == null) {
@@ -456,7 +456,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 刷新虚拟 NAS 自动备份日期、时间和开关说明。
+     * 刷新虚拟 NAS 自动备份日期、时间和开关说明
      */
     private static void refreshNasAutoBackupPreferenceViews(Context context) {
         var datePreference = nasDatePreferenceRef.get();
@@ -474,7 +474,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 调度备份应用原生 NAS 自动备份 Job。
+     * 调度备份应用原生 NAS 自动备份 Job
      */
     private static void scheduleNasAutoBackupJob(Context context) {
         cancelNasAutoBackupJob(context);
@@ -495,7 +495,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 取消备份应用原生 NAS 自动备份 Job。
+     * 取消备份应用原生 NAS 自动备份 Job
      */
     private static void cancelNasAutoBackupJob(Context context) {
         var scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
@@ -505,7 +505,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 计算下一次按所选日期和时间触发距离当前时间的毫秒数。
+     * 计算下一次按所选日期和时间触发距离当前时间的毫秒数
      */
     private static long calculateNextDelayMillis(int days, int hour, int minute) {
         var now = Calendar.getInstance();
@@ -532,7 +532,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 判断当前星期是否被选中。
+     * 判断当前星期是否被选中
      */
     private static boolean isDaySelected(int days, int calendarDay) {
         for (var i = 0; i < DAY_MAP.length; i++) {
@@ -544,42 +544,42 @@ public class AutoBackupHook {
     }
 
     /**
-     * 读取备份应用原生偏好文件。
+     * 读取备份应用原生偏好文件
      */
     private static android.content.SharedPreferences getAutoBackupPreferences(Context context) {
         return context.getSharedPreferences(context.getPackageName() + PREF_NAME_SUFFIX, Context.MODE_MULTI_PROCESS);
     }
 
     /**
-     * 读取 NAS 自动备份开关状态。
+     * 读取 NAS 自动备份开关状态
      */
     private static boolean isNasAutoBackupEnabled(Context context) {
         return getAutoBackupPreferences(context).getBoolean(PREF_KEY_NAS_TASK, false);
     }
 
     /**
-     * 读取自动备份日期编码。
+     * 读取自动备份日期编码
      */
     private static int getAutoBackupDate(Context context) {
         return getAutoBackupPreferences(context).getInt(PREF_KEY_DATE, NAS_AUTO_BACKUP_DAYS_ALL);
     }
 
     /**
-     * 读取自动备份小时。
+     * 读取自动备份小时
      */
     private static int getAutoBackupHour(Context context) {
         return getAutoBackupPreferences(context).getInt(PREF_KEY_HOUR, NAS_AUTO_BACKUP_HOUR);
     }
 
     /**
-     * 读取自动备份分钟。
+     * 读取自动备份分钟
      */
     private static int getAutoBackupMinute(Context context) {
         return getAutoBackupPreferences(context).getInt(PREF_KEY_MINUTE, NAS_AUTO_BACKUP_MINUTE);
     }
 
     /**
-     * 读取 NAS 自动备份应用包名。
+     * 读取 NAS 自动备份应用包名
      */
     private static HashSet<String> getNasBackupPackages(Context context) {
         var packages = getAutoBackupPreferences(context).getStringSet(PREF_KEY_NAS_PACKAGES, null);
@@ -587,14 +587,14 @@ public class AutoBackupHook {
     }
 
     /**
-     * 生成 NAS 自动备份状态说明。
+     * 生成 NAS 自动备份状态说明
      */
     private static String buildNasAutoBackupSummary(Context context, boolean enabled) {
         return enabled ? "已开启，" + buildDateText(context) + " " + buildTimeText(context) + "，" + buildItemsText(context) : "关闭后不再调度 NAS 自动备份";
     }
 
     /**
-     * 生成日期显示文本。
+     * 生成日期显示文本
      */
     private static String buildDateText(Context context) {
         var days = getAutoBackupDate(context);
@@ -614,7 +614,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 生成时间显示文本。
+     * 生成时间显示文本
      */
     private static String buildTimeText(Context context) {
         var calendar = Calendar.getInstance();
@@ -624,7 +624,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 生成项目显示文本。
+     * 生成项目显示文本
      */
     private static String buildItemsText(Context context) {
         var count = getNasBackupPackages(context).size();
@@ -632,7 +632,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 设置 ValuePreference 的右侧值，失败时退回摘要。
+     * 设置 ValuePreference 的右侧值，失败时退回摘要
      */
     private static void setPreferenceValue(Object preference, String value) {
         try {
@@ -643,7 +643,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 打开原生本地自动备份日期控件，让 NAS 日期和本地日期共用同一套 UI 与偏好。
+     * 打开原生本地自动备份日期控件，让 NAS 日期和本地日期共用同一套 UI 与偏好
      */
     private static void openLocalDatePreference(Object fragment) {
         try {
@@ -657,7 +657,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 打开原生本地自动备份时间控件，让 NAS 时间和本地时间共用同一套 UI 与偏好。
+     * 打开原生本地自动备份时间控件，让 NAS 时间和本地时间共用同一套 UI 与偏好
      */
     private static void openLocalTimePreference(Object fragment) {
         try {
@@ -671,7 +671,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 显示备份项目选择弹窗并保存包名集合。
+     * 显示备份项目选择弹窗并保存包名集合
      */
     private static void showItemsDialog(Context context, Object preference) {
         try {
@@ -701,7 +701,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 在备份项目弹窗内切换全选状态，只更新勾选状态，不关闭弹窗。
+     * 在备份项目弹窗内切换全选状态，只更新勾选状态，不关闭弹窗
      */
     private static void toggleAllItems(AlertDialog dialog, boolean[] checked) {
         setAllItemsChecked(dialog, checked, !isAllItemsChecked(checked));
@@ -709,7 +709,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 设置备份项目弹窗内所有项目的勾选状态。
+     * 设置备份项目弹窗内所有项目的勾选状态
      */
     private static void setAllItemsChecked(AlertDialog dialog, boolean[] checked, boolean selected) {
         var listView = dialog.getListView();
@@ -720,7 +720,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 判断备份项目弹窗内是否已经全选。
+     * 判断备份项目弹窗内是否已经全选
      */
     private static boolean isAllItemsChecked(boolean[] checked) {
         if (checked.length == 0) {
@@ -735,7 +735,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 根据当前勾选状态更新备份项目弹窗全选按钮文字。
+     * 根据当前勾选状态更新备份项目弹窗全选按钮文字
      */
     private static void updateSelectAllButtonText(AlertDialog dialog, boolean[] checked) {
         var button = dialog.getButton(DialogInterface.BUTTON_NEUTRAL);
@@ -745,7 +745,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 保存项目选择并刷新调度。
+     * 保存项目选择并刷新调度
      */
     private static void saveItemsSelection(Context context, Object preference, String[] packages, boolean[] checked) {
         var selected = new HashSet<String>();
@@ -764,7 +764,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 收集所有第三方应用包名，作为 NAS 自动备份默认项目。
+     * 收集所有第三方应用包名，作为 NAS 自动备份默认项目
      */
     private static HashSet<String> collectUserPackages(Context context) {
         var packages = new HashSet<String>();
@@ -778,7 +778,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 收集第三方应用的显示名称和包名。
+     * 收集第三方应用的显示名称和包名
      */
     private static TreeMap<String, String> collectUserPackageLabels(Context context) {
         var packages = new TreeMap<String, String>();
@@ -794,7 +794,7 @@ public class AutoBackupHook {
     }
 
     /**
-     * 调用可选方法，兼容不同 Preference 实现。
+     * 调用可选方法，兼容不同 Preference 实现
      */
     private static void callOptional(Object target, String methodName, Object... args) {
         try {
@@ -804,18 +804,18 @@ public class AutoBackupHook {
     }
 
     /**
-     * 统一记录 NAS 自动备份 Hook 异常。
+     * 统一记录 NAS 自动备份 Hook 异常
      */
     private static void logError(String message, Throwable e) {
         LogHelp.e(TAG, message + ": " + e.getClass().getSimpleName() + ": " + e.getMessage(), e);
     }
 
     /**
-     * Preference 点击回调。
+     * Preference 点击回调
      */
     private interface PreferenceClickHandler {
         /**
-         * 处理 Preference 点击事件。
+         * 处理 Preference 点击事件
          */
         boolean onClick(Object preference);
     }

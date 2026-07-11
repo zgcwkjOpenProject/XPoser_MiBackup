@@ -12,8 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 
 /**
- * 配置文件读写工具。
- * 配置文件位于 /sdcard/MIUI/backup/config.ini，格式为每行 key=value。
+ * 配置文件读写工具
+ * 配置文件位于 /sdcard/MIUI/backup/config.ini，格式为每行 key=value
  */
 public class ConfigHelp {
 
@@ -22,8 +22,8 @@ public class ConfigHelp {
     private static final String CONFIG_PATH = BACKUP_ROOT + "/config.ini";
 
     /**
-     * 加载配置并补齐默认值。
-     * 文件不存在或部分 key 缺失时，调用方仍能拿到完整配置。
+     * 加载配置并补齐默认值
+     * 文件不存在或部分 key 缺失时，调用方仍能拿到完整配置
      */
     public static JSONObject load() {
         var map = new LinkedHashMap<String, String>();
@@ -63,8 +63,8 @@ public class ConfigHelp {
     }
 
     /**
-     * 保存配置为 INI 风格文本。
-     * 先创建父目录再打开文件，避免首次保存时 FileWriter 因目录不存在而失败。
+     * 保存配置为 INI 风格文本
+     * 先创建父目录再打开文件，避免首次保存时 FileWriter 因目录不存在而失败
      */
     public static void save(JSONObject json) {
         var file = new File(CONFIG_PATH);
@@ -93,14 +93,14 @@ public class ConfigHelp {
     }
 
     /**
-     * 读取字符串配置。
+     * 读取字符串配置
      */
     public static String getString(String key, String def) {
         return load().optString(key, def);
     }
 
     /**
-     * 读取整数配置，解析失败时使用调用方提供的默认值。
+     * 读取整数配置，解析失败时使用调用方提供的默认值
      */
     public static int getInt(String key, int def) {
         try {
@@ -111,7 +111,7 @@ public class ConfigHelp {
     }
 
     /**
-     * 默认配置值。
+     * 默认配置值
      */
     private static LinkedHashMap<String, String> defaultMap() {
         var map = new LinkedHashMap<String, String>();

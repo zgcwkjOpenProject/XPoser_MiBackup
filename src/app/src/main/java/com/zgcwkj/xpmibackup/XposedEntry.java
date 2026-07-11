@@ -9,10 +9,11 @@ import com.zgcwkj.xpmibackup.hook.SettingsHook;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import java.io.File;
 
 /**
- * Xposed模块入口。
- * 设置应用负责显示配置入口，小米备份负责接入DFS AIDL重定向。
+ * Xposed模块入口
+ * 设置应用负责显示配置入口，小米备份负责接入DFS AIDL重定向
  */
 public class XposedEntry implements IXposedHookLoadPackage {
 
@@ -20,7 +21,7 @@ public class XposedEntry implements IXposedHookLoadPackage {
     private static final String TEMP_ROOT = ConfigHelp.BACKUP_ROOT + "/AllBackupTemp";
 
     /**
-     * 根据加载的包名安装对应Hook。
+     * 根据加载的包名安装对应Hook
      */
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -36,50 +37,48 @@ public class XposedEntry implements IXposedHookLoadPackage {
     }
 
     /**
-     * 清理AllBackupTemp下面残留的空任务目录。
-     * 非空目录保留，避免误删未完成的备份或恢复临时文件。
+     * 清理AllBackupTemp下面上次会话残留的所有临时内容
      */
     private void cleanupTempDirs() {
         try {
-            var root = new java.io.File(TEMP_ROOT);
-            if (!root.exists() || !root.isDirectory()) {
+            var root = new File(TEMP_ROOT);
+            if (!root.exists()) {
+                root.mkdirs();
                 return;
             }
-            cleanBlankDirs(root, root);
+            if (!root.isDirectory()) {
+                return;
+            }
+            deleteChildren(root);
         } catch (Throwable e) {
             LogHelp.e(TAG, "cleanup temp dirs failed: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 自底向上删除空内容目录，并保留AllBackupTemp根目录。
+     * 删除目录下所有子项，保留目录自身
      */
-    private boolean cleanBlankDirs(java.io.File dir, java.io.File root) {
+    private void deleteChildren(File dir) {
         var children = dir.listFiles();
         if (children != null) {
             for (var child : children) {
-                if (child.isDirectory()) {
-                    cleanBlankDirs(child, root);
-                } else {
-                    deleteBlankFile(child);
-                }
+                deleteRecursively(child);
             }
         }
-
-        children = dir.listFiles();
-        var blank = children == null || children.length == 0;
-        if (!dir.equals(root) && blank) {
-            return dir.delete();
-        }
-        return blank;
     }
 
     /**
-     * 删除0字节临时文件，让只剩空文件的任务目录也能被清掉。
+     * 递归删除临时文件或目录
      */
-    private void deleteBlankFile(java.io.File file) {
-        if (file != null && file.isFile() && file.length() == 0) {
-            file.delete();
+    private void deleteRecursively(File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            deleteChildren(file);
+        }
+        if (!file.delete()) {
+            LogHelp.e(TAG, "delete temp path failed: " + file.getAbsolutePath());
         }
     }
 }
