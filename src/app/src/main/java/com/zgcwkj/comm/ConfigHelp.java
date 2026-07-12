@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 
 /**
  * 配置文件读写工具
@@ -116,8 +117,8 @@ public class ConfigHelp {
     private static LinkedHashMap<String, String> defaultMap() {
         var map = new LinkedHashMap<String, String>();
         map.put("device_id", "zgcwkj");
-        map.put("device_name", "云端备份设备");
-        map.put("device_describe", "我的云端备份设备");
+        map.put("device_name", isChineseLocale() ? "云端备份设备" : "Cloud backup device");
+        map.put("device_describe", isChineseLocale() ? "我的云端备份设备" : "My cloud backup device");
         map.put("backup_path", "MIUI/backup");
         map.put("backup_max", "5");
         map.put("log_enabled", "false");
@@ -125,12 +126,16 @@ public class ConfigHelp {
         map.put("upload_threads", "3");
         map.put("smb_server", "192.168.68.1");
         map.put("smb_port", "445");
-        map.put("smb_share", "备份数据");
+        map.put("smb_share", isChineseLocale() ? "备份数据" : "BackupData");
         map.put("smb_user", "");
         map.put("smb_pass", "");
         map.put("webdav_url", "https://192.168.1.1:8080/dav");
         map.put("webdav_user", "");
         map.put("webdav_pass", "");
         return map;
+    }
+
+    private static boolean isChineseLocale() {
+        return "zh".equalsIgnoreCase(Locale.getDefault().getLanguage());
     }
 }

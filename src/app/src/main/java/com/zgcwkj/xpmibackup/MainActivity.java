@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
             var deviceId = com.zgcwkj.comm.ConfigHelp.getString("device_id", "");
             var deviceName = com.zgcwkj.comm.ConfigHelp.getString("device_name", "");
             if (deviceId.isEmpty()) {
-                android.widget.Toast.makeText(this, "请先在设备配置中填写设备ID",
+                android.widget.Toast.makeText(this, R.string.toast_device_id_required,
                     android.widget.Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
             try {
                 startActivity(intent);
             } catch (Exception e) {
-                android.widget.Toast.makeText(this, "未找到备份APP，请确认已安装小米备份",
+                android.widget.Toast.makeText(this, R.string.toast_backup_app_missing,
                     android.widget.Toast.LENGTH_SHORT).show();
             }
         });

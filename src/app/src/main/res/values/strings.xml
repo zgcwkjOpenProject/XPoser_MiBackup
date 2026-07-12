@@ -1,7 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">云备份助手</string>
+    <string name="settings_name">云备份助手</string>
+    <string name="xposed_description">云备份助手 - 支持备份到自己的云端设备</string>
     <string name="author">zgcwkj</string>
     <string name="author_url">http://www.zgcwkj.cn</string>
     <string name="footer_text">Powered by <a href="http://www.zgcwkj.cn">zgcwkj</a></string>
+
+    <string name="action_backup">备份</string>
+    <string name="tab_device_config">设备配置</string>
+    <string name="tab_service_config">服务配置</string>
+    <string name="title_device_config">设备配置</string>
+    <string name="title_service_config">服务配置</string>
+
+    <string name="device_name">设备名称</string>
+    <string name="device_name_hint">例: 远程备份设备</string>
+    <string name="device_description">设备描述</string>
+    <string name="device_description_hint">例: 我的云端备份设备</string>
+    <string name="backup_path">备份路径</string>
+    <string name="backup_path_description">在云端存储的起始路径</string>
+    <string name="backup_path_hint">例: MIUI/backup</string>
+    <string name="max_backup_count">最大备份数</string>
+    <string name="max_backup_count_description">超出数量时自动清理旧备份，设 0 不清理</string>
+    <string name="write_error_log">写入错误日志</string>
+    <string name="log_path_hint">/sdcard/MIUI/backup/logs/年月日.log</string>
+    <string name="save_config">保存配置</string>
+
+    <string name="backup_protocol">备份协议</string>
+    <string name="upload_threads">上传线程数</string>
+    <string name="server_address">服务器地址</string>
+    <string name="smb_server_hint">例: 192.168.1.100</string>
+    <string name="port">端口</string>
+    <string name="share_folder">共享文件夹</string>
+    <string name="share_folder_hint">例: backup</string>
+    <string name="username_optional">用户名（留空为匿名）</string>
+    <string name="username">用户名</string>
+    <string name="password">密码</string>
+    <string name="webdav_url_hint">例: https://192.168.1.100:8080/dav</string>
+    <string name="webdav_https_required">安卓系统要求必须使用 HTTPS，否则无法连接</string>
+    <string name="test_and_save_config">测试并保存配置</string>
+    <string name="testing_connection">正在测试连接…</string>
+
+    <string name="toast_device_id_required">请先在设备配置中填写设备ID</string>
+    <string name="toast_backup_app_missing">未找到备份APP，请确认已安装小米备份</string>
+    <string name="toast_config_saved">配置已保存</string>
+    <string name="toast_connection_success">连接成功，配置已保存</string>
+    <string name="toast_connection_failed">连接失败，请检查参数</string>
 </resources>

@@ -45,7 +45,7 @@ public class DeviceConfigFragment extends Fragment {
         // 点击事件
         btnSave.setOnClickListener(v -> {
             saveConfig();
-            Toast.makeText(getActivity(), "配置已保存", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getActivity(), R.string.toast_config_saved, Toast.LENGTH_SHORT).show();
         });
 
         // 底部链接

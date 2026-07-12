@@ -1,10 +1,14 @@
 package com.zgcwkj.xpmibackup.hook;
 
+import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import com.zgcwkj.comm.LogHelp;
+import com.zgcwkj.xpmibackup.R;
 
 import java.util.List;
+import java.util.Locale;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
@@ -15,7 +19,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  * 在小米设置APP中注入"云备份助手"入口，并让智能存储功能始终可见
  *
  * 作用原理：
- * 1. hook MiuiSettings.updateHeaderList → 在"小米澎湃AI"下方插入"云备份助手"入口
+ * 1. hook MiuiSettings.updateHeaderList → 在"我的设备"下方插入"云备份助手"入口
  * 2. hook SmartStorageController.getAvailabilityStatus → 强制返回0（功能可用）
  * 3. hook SmartStorageBackupHelper.isSupported → 强制返回true（已支持）
  * 4. hook BackupNasDeviceProvider.query → 返回模拟的NAS设备数据
@@ -24,6 +28,9 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class SettingsHook {
 
     private static final String TAG = "XpMiBackup";
+    private static final String MODULE_PACKAGE = "com.zgcwkj.xpmibackup";
+    private static final String MODULE_ACTIVITY = "com.zgcwkj.xpmibackup.MainActivity";
+    private static final String FALLBACK_ENTRY_TITLE = "云备份助手";
 
     /**
      * 注册所有设置相关Hook
@@ -43,15 +50,15 @@ public class SettingsHook {
     /**
      * 拦截MiuiSettings.updateHeaderList()
      * 原始方法根据设备能力过滤设置主页的header列表
-     * 在"小米澎湃AI"项后面插入自定义"云备份助手"入口，
+     * 在"我的设备"项后面插入自定义"云备份助手"入口，
      * 点击后跳转到云备份助手配置界面(MainActivity)
      *
      * 注入流程：
-     * 1. 遍历header列表，通过title文字匹配找到"小米澎湃AI"的位置
+     * 1. 遍历header列表，通过title文字匹配找到"我的设备"的位置
      * 2. 防重复检查，避免多次调用导致重复插入
      * 3. 创建MIUI风格的PreferenceActivity.Header对象（非标准android.preference）
-     * 4. 设置标题、图标（使用设置APP内的com_miui_backup图标）、跳转Intent
-     * 5. 插入到AI项后面
+     * 4. 设置标题、图标（使用设置APP图标）、跳转Intent
+     * 5. 插入到"我的设备"项后面
      */
     private void hookUpdateHeaderList(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -60,56 +67,138 @@ public class SettingsHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        var list = (List) param.args[0];
-                        if (list == null || list.isEmpty()) return;
-
-                        // 遍历找"小米澎湃AI"
-                        var aiIndex = -1;
-                        for (var i = 0; i < list.size(); i++) {
-                            var header = list.get(i);
-                            var title = XposedHelpers.getObjectField(header, "title");
-                            var titleRes = XposedHelpers.getIntField(header, "titleRes");
-                            var titleStr = title != null ? title.toString() : "";
-                            if (titleStr.isEmpty() && titleRes > 0) {
-                                try {
-                                    var res = ((android.app.Activity) param.thisObject).getResources();
-                                    titleStr = res.getString(titleRes);
-                                } catch (Exception ignored) {}
+                        try {
+                            var list = (List) param.args[0];
+                            if (list == null || list.isEmpty()) {
+                                return;
                             }
-                            if (titleStr.contains("澎湃")) {
-                                aiIndex = i;
-                                break;
+
+                            var myDeviceIndex = findMyDeviceIndex(param.thisObject, list);
+                            if (myDeviceIndex < 0) {
+                                return;
                             }
+
+                            if (myDeviceIndex + 1 < list.size() && isOurHeader(param.thisObject, list.get(myDeviceIndex + 1))) {
+                                return;
+                            }
+
+                            // 创建MIUI Header（必须使用settingslib.miuisettings的Header类，否则ClassCastException）
+                            var headerClass = Class.forName(
+                                "com.android.settingslib.miuisettings.preference.PreferenceActivity$Header",
+                                false,
+                                lpparam.classLoader
+                            );
+                            var header = headerClass.getDeclaredConstructor().newInstance();
+                            XposedHelpers.setObjectField(header, "title", entryTitle(param.thisObject));
+                            XposedHelpers.setIntField(header, "iconRes", findIconRes(lpparam, param.thisObject));
+
+                            var intent = new Intent();
+                            intent.setClassName(MODULE_PACKAGE, MODULE_ACTIVITY);
+                            XposedHelpers.setObjectField(header, "intent", intent);
+
+                            list.add(myDeviceIndex + 1, header);
+                        } catch (Throwable e) {
+                            logError("settings header inject failed", e);
                         }
-                        if (aiIndex < 0) return;
-
-                        // 防重复插入
-                        if (aiIndex + 1 < list.size()) {
-                            var next = list.get(aiIndex + 1);
-                            var nextTitle = XposedHelpers.getObjectField(next, "title");
-                            if (nextTitle != null && nextTitle.toString().equals("云备份助手")) return;
-                        }
-
-                        // 创建MIUI Header（必须使用settingslib.miuisettings的Header类，否则ClassCastException）
-                        var headerClass = Class.forName(
-                            "com.android.settingslib.miuisettings.preference.PreferenceActivity$Header",
-                            false, lpparam.classLoader);
-                        var header = headerClass.newInstance();
-                        XposedHelpers.setObjectField(header, "title", "云备份助手");
-                        XposedHelpers.setIntField(header, "iconRes",
-                            XposedHelpers.getStaticIntField(
-                                XposedHelpers.findClass("com.android.settings.R$drawable", lpparam.classLoader),
-                                "com_miui_backup"));
-                        var intent = new Intent();
-                        intent.setClassName("com.zgcwkj.xpmibackup", "com.zgcwkj.xpmibackup.MainActivity");
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        XposedHelpers.setObjectField(header, "intent", intent);
-
-                        list.add(aiIndex + 1, header);
                     }
                 });
         } catch (Throwable e) {
             logError("hookUpdateHeaderList failed", e);
+        }
+    }
+
+    /**
+     * 查找我的设备入口位置
+     */
+    private int findMyDeviceIndex(Object owner, List<?> list) {
+        for (var i = 0; i < list.size(); i++) {
+            var title = headerTitle(owner, list.get(i));
+            var lowerTitle = title.toLowerCase(Locale.ROOT);
+            if (title.contains("我的设备") || lowerTitle.contains("my device")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 判断是否为模块入口
+     */
+    private boolean isOurHeader(Object owner, Object header) {
+        try {
+            var intent = XposedHelpers.getObjectField(header, "intent");
+            if (intent instanceof Intent) {
+                var component = ((Intent) intent).getComponent();
+                return component != null
+                    && MODULE_PACKAGE.equals(component.getPackageName())
+                    && MODULE_ACTIVITY.equals(component.getClassName());
+            }
+        } catch (Throwable ignored) {
+        }
+        var title = headerTitle(null, header);
+        return entryTitle(owner).equals(title) || FALLBACK_ENTRY_TITLE.equals(title);
+    }
+
+    /**
+     * 读取 Header 标题
+     */
+    private String headerTitle(Object owner, Object header) {
+        try {
+            var title = XposedHelpers.getObjectField(header, "title");
+            var titleStr = title != null ? title.toString() : "";
+            if (!titleStr.isEmpty()) {
+                return titleStr;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            var titleRes = XposedHelpers.getIntField(header, "titleRes");
+            if (titleRes > 0 && owner instanceof Activity) {
+                return ((Activity) owner).getResources().getString(titleRes);
+            }
+        } catch (Throwable ignored) {
+        }
+        return "";
+    }
+
+    /**
+     * 获取当前语言入口标题
+     */
+    private String entryTitle(Object owner) {
+        if (owner instanceof Context) {
+            try {
+                var context = ((Context) owner).createPackageContext(MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY);
+                return context.getString(R.string.settings_name);
+            } catch (Throwable ignored) {
+            }
+        }
+        return FALLBACK_ENTRY_TITLE;
+    }
+
+    /**
+     * 查找设置图标资源
+     */
+    private int findIconRes(XC_LoadPackage.LoadPackageParam lpparam, Object owner) {
+        if (lpparam.appInfo != null && lpparam.appInfo.icon > 0) {
+            return lpparam.appInfo.icon;
+        }
+        if (owner instanceof Context) {
+            try {
+                var iconRes = ((Context) owner).getApplicationInfo().icon;
+                if (iconRes > 0) {
+                    return iconRes;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        try {
+            return XposedHelpers.getStaticIntField(
+                XposedHelpers.findClass("com.android.settings.R$drawable", lpparam.classLoader),
+                "com_miui_backup"
+            );
+        } catch (Throwable e) {
+            logError("find settings header icon failed", e);
+            return 0;
         }
     }
 

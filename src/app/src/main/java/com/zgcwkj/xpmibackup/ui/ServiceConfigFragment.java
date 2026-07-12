@@ -98,7 +98,7 @@ public class ServiceConfigFragment extends Fragment {
     private void testAndSave() {
         // 禁用按钮，显示转圈
         btnSave.setEnabled(false);
-        btnSave.setText("测试连接中…");
+        btnSave.setText(R.string.testing_connection);
         testingPanel.setVisibility(View.VISIBLE);
 
         new Thread(() -> {
@@ -110,12 +110,12 @@ public class ServiceConfigFragment extends Fragment {
             getActivity().runOnUiThread(() -> {
                 testingPanel.setVisibility(View.GONE);
                 btnSave.setEnabled(true);
-                btnSave.setText("保存配置");
+                btnSave.setText(R.string.test_and_save_config);
 
                 if (ok) {
-                    Toast.makeText(getActivity(), "连接成功，配置已保存", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getActivity(), R.string.toast_connection_success, Toast.LENGTH_SHORT).show();
                 } else {
-                    Toast.makeText(getActivity(), "连接失败，请检查参数", Toast.LENGTH_LONG).show();
+                    Toast.makeText(getActivity(), R.string.toast_connection_failed, Toast.LENGTH_LONG).show();
                 }
             });
         }).start();

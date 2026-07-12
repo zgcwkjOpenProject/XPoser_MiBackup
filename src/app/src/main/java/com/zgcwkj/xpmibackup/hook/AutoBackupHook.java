@@ -27,6 +27,7 @@ import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.TreeMap;
 
 /**
@@ -55,9 +56,9 @@ public class AutoBackupHook {
     private static final int NAS_AUTO_BACKUP_MINUTE = 30;
     private static final int NAS_AUTO_BACKUP_JOB_ID = 103;
     private static final long SCHEDULE_REFRESH_DELAY_MS = 500L;
-    private static final int[] DAY_MAP = {Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY,
-        Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY};
-    private static final String[] DAY_KEYS = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+    private static final int[] DAY_MAP = {Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY};
+    private static final String[] DAY_KEYS_ZH = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+    private static final String[] DAY_KEYS_EN = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
     private static WeakReference<Object> nasSwitchPreferenceRef = new WeakReference<>(null);
     private static WeakReference<Object> nasDatePreferenceRef = new WeakReference<>(null);
     private static WeakReference<Object> nasTimePreferenceRef = new WeakReference<>(null);
@@ -253,13 +254,13 @@ public class AutoBackupHook {
             }
 
             var category = createPreference("androidx.preference.PreferenceCategory", context, lpparam);
-            XposedHelpers.callMethod(category, "setTitle", "智能存储自动备份");
+            XposedHelpers.callMethod(category, "setTitle", localizedText(context, "智能存储自动备份", "Smart Storage auto backup"));
             XposedHelpers.callMethod(screen, "addPreference", category);
 
             var enabled = isNasAutoBackupEnabled(context);
             var checkBox = createPreference("androidx.preference.CheckBoxPreference", context, lpparam);
             XposedHelpers.callMethod(checkBox, "setKey", KEY_NAS_AUTO_BACKUP);
-            XposedHelpers.callMethod(checkBox, "setTitle", "开启 NAS 自动备份");
+            XposedHelpers.callMethod(checkBox, "setTitle", localizedText(context, "开启 NAS 自动备份", "Enable NAS auto backup"));
             XposedHelpers.callMethod(checkBox, "setSummary", buildNasAutoBackupSummary(context, enabled));
             XposedHelpers.callMethod(checkBox, "setChecked", enabled);
             XposedHelpers.callMethod(checkBox, "setOnPreferenceChangeListener", createNasAutoBackupChangeListener(lpparam));
@@ -267,7 +268,7 @@ public class AutoBackupHook {
 
             var date = createPreference("com.miui.backup.widget.ValuePreference", context, lpparam);
             XposedHelpers.callMethod(date, "setKey", KEY_NAS_AUTO_BACKUP_DATE);
-            XposedHelpers.callMethod(date, "setTitle", "备份日期");
+            XposedHelpers.callMethod(date, "setTitle", localizedText(context, "备份日期", "Backup date"));
             setPreferenceValue(date, buildDateText(context));
             callOptional(date, "B", true);
             XposedHelpers.callMethod(date, "setOnPreferenceClickListener", createPreferenceClickListener(lpparam, preference -> {
@@ -278,7 +279,7 @@ public class AutoBackupHook {
 
             var time = createPreference("com.miui.backup.widget.ValuePreference", context, lpparam);
             XposedHelpers.callMethod(time, "setKey", KEY_NAS_AUTO_BACKUP_TIME);
-            XposedHelpers.callMethod(time, "setTitle", "备份时间");
+            XposedHelpers.callMethod(time, "setTitle", localizedText(context, "备份时间", "Backup time"));
             setPreferenceValue(time, buildTimeText(context));
             callOptional(time, "B", true);
             XposedHelpers.callMethod(time, "setOnPreferenceClickListener", createPreferenceClickListener(lpparam, preference -> {
@@ -290,7 +291,7 @@ public class AutoBackupHook {
 
             var items = createPreference("com.miui.backup.widget.ValuePreference", context, lpparam);
             XposedHelpers.callMethod(items, "setKey", KEY_NAS_AUTO_BACKUP_ITEMS);
-            XposedHelpers.callMethod(items, "setTitle", "备份项目");
+            XposedHelpers.callMethod(items, "setTitle", localizedText(context, "备份项目", "Backup items"));
             setPreferenceValue(items, buildItemsText(context));
             callOptional(items, "B", true);
             XposedHelpers.callMethod(items, "setOnPreferenceClickListener", createPreferenceClickListener(lpparam, preference -> {
@@ -341,7 +342,10 @@ public class AutoBackupHook {
             if (success) {
                 XposedHelpers.callMethod(preference, "setSummary", buildNasAutoBackupSummary(context, enabled));
             }
-            Toast.makeText(context, success ? "NAS 自动备份已更新" : "NAS 自动备份设置失败", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context,
+                success ? localizedText(context, "NAS 自动备份已更新", "NAS auto backup updated")
+                    : localizedText(context, "NAS 自动备份设置失败", "Failed to update NAS auto backup"),
+                Toast.LENGTH_SHORT).show();
             return success;
         });
     }
@@ -590,7 +594,12 @@ public class AutoBackupHook {
      * 生成 NAS 自动备份状态说明
      */
     private static String buildNasAutoBackupSummary(Context context, boolean enabled) {
-        return enabled ? "已开启，" + buildDateText(context) + " " + buildTimeText(context) + "，" + buildItemsText(context) : "关闭后不再调度 NAS 自动备份";
+        if (!enabled) {
+            return localizedText(context, "关闭后不再调度 NAS 自动备份", "NAS auto backup will not be scheduled while disabled");
+        }
+        return isChinese(context)
+            ? "已开启，" + buildDateText(context) + " " + buildTimeText(context) + "，" + buildItemsText(context)
+            : "Enabled, " + buildDateText(context) + " " + buildTimeText(context) + ", " + buildItemsText(context);
     }
 
     /**
@@ -599,18 +608,19 @@ public class AutoBackupHook {
     private static String buildDateText(Context context) {
         var days = getAutoBackupDate(context);
         if (days == 0) {
-            return "从不";
+            return localizedText(context, "从不", "Never");
         }
         if (days == NAS_AUTO_BACKUP_DAYS_ALL) {
-            return "每天";
+            return localizedText(context, "每天", "Every day");
         }
         var names = new ArrayList<String>();
-        for (var i = 0; i < DAY_KEYS.length; i++) {
+        var dayKeys = isChinese(context) ? DAY_KEYS_ZH : DAY_KEYS_EN;
+        for (var i = 0; i < dayKeys.length; i++) {
             if ((days & (1 << i)) != 0) {
-                names.add(DAY_KEYS[i]);
+                names.add(dayKeys[i]);
             }
         }
-        return android.text.TextUtils.join("、", names);
+        return android.text.TextUtils.join(isChinese(context) ? "、" : ", ", names);
     }
 
     /**
@@ -628,7 +638,10 @@ public class AutoBackupHook {
      */
     private static String buildItemsText(Context context) {
         var count = getNasBackupPackages(context).size();
-        return count > 0 ? "应用数 " + count : "未选择应用";
+        if (count <= 0) {
+            return localizedText(context, "未选择应用", "No apps selected");
+        }
+        return isChinese(context) ? "应用数 " + count : count + " apps";
     }
 
     /**
@@ -684,14 +697,14 @@ public class AutoBackupHook {
                 checked[i] = selectedPackages.contains(packages[i]);
             }
             var dialog = new AlertDialog.Builder(context)
-                .setTitle("备份项目")
+                .setTitle(localizedText(context, "备份项目", "Backup items"))
                 .setMultiChoiceItems(labels, checked, (dialogInterface, which, isChecked) -> {
                     checked[which] = isChecked;
                     updateSelectAllButtonText((AlertDialog) dialogInterface, checked);
                 })
-                .setPositiveButton("确定", (dialogInterface, which) -> saveItemsSelection(context, preference, packages, checked))
-                .setNegativeButton("取消", null)
-                .setNeutralButton("全选", null)
+                .setPositiveButton(localizedText(context, "确定", "OK"), (dialogInterface, which) -> saveItemsSelection(context, preference, packages, checked))
+                .setNegativeButton(localizedText(context, "取消", "Cancel"), null)
+                .setNeutralButton(localizedText(context, "全选", "Select all"), null)
                 .show();
             updateSelectAllButtonText(dialog, checked);
             dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener(view -> toggleAllItems(dialog, checked));
@@ -740,7 +753,10 @@ public class AutoBackupHook {
     private static void updateSelectAllButtonText(AlertDialog dialog, boolean[] checked) {
         var button = dialog.getButton(DialogInterface.BUTTON_NEUTRAL);
         if (button != null) {
-            button.setText(isAllItemsChecked(checked) ? "取消全选" : "全选");
+            var context = dialog.getContext();
+            button.setText(isAllItemsChecked(checked)
+                ? localizedText(context, "取消全选", "Clear all")
+                : localizedText(context, "全选", "Select all"));
         }
     }
 
@@ -755,7 +771,7 @@ public class AutoBackupHook {
             }
         }
         if (selected.isEmpty()) {
-            Toast.makeText(context, "至少选择一个应用", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, localizedText(context, "至少选择一个应用", "Select at least one app"), Toast.LENGTH_SHORT).show();
             return;
         }
         getAutoBackupPreferences(context).edit().putStringSet(PREF_KEY_NAS_PACKAGES, selected).apply();
@@ -800,6 +816,19 @@ public class AutoBackupHook {
         try {
             XposedHelpers.callMethod(target, methodName, args);
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static String localizedText(Context context, String zh, String en) {
+        return isChinese(context) ? zh : en;
+    }
+
+    private static boolean isChinese(Context context) {
+        try {
+            var locale = context.getResources().getConfiguration().getLocales().get(0);
+            return "zh".equalsIgnoreCase(locale.getLanguage());
+        } catch (Throwable ignored) {
+            return "zh".equalsIgnoreCase(Locale.getDefault().getLanguage());
         }
     }
 

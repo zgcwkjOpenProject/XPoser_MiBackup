@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="服务配置"
+            android:text="@string/title_service_config"
             android:textSize="22sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
@@ -22,7 +22,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="备份协议"
+            android:text="@string/backup_protocol"
             android:textSize="14sp"
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="8dp" />
@@ -54,7 +54,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="上传线程数"
+            android:text="@string/upload_threads"
             android:textSize="14sp"
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="4dp" />
@@ -81,7 +81,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="服务器地址"
+                android:text="@string/server_address"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -90,7 +90,7 @@
                 android:id="@+id/et_smb_server"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="例: 192.168.1.100"
+                android:hint="@string/smb_server_hint"
                 android:inputType="text"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -101,7 +101,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="端口"
+                android:text="@string/port"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -121,7 +121,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="共享文件夹"
+                android:text="@string/share_folder"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -130,7 +130,7 @@
                 android:id="@+id/et_smb_share"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="例: backup"
+                android:hint="@string/share_folder_hint"
                 android:inputType="text"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -141,7 +141,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="用户名（留空为匿名）"
+                android:text="@string/username_optional"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -150,7 +150,7 @@
                 android:id="@+id/et_smb_user"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="用户名"
+                android:hint="@string/username"
                 android:inputType="text"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -161,7 +161,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="密码"
+                android:text="@string/password"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -170,7 +170,7 @@
                 android:id="@+id/et_smb_pass"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="密码"
+                android:hint="@string/password"
                 android:inputType="text"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -190,7 +190,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="服务器地址"
+                android:text="@string/server_address"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -199,7 +199,7 @@
                 android:id="@+id/et_webdav_url"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="例: https://192.168.1.100:8080/dav"
+                android:hint="@string/webdav_url_hint"
                 android:inputType="textUri"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -210,7 +210,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="安卓系统要求必须使用 HTTPS，否则无法连接"
+                android:text="@string/webdav_https_required"
                 android:textSize="12sp"
                 android:textColor="#F44336"
                 android:layout_marginBottom="16dp" />
@@ -218,7 +218,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="用户名"
+                android:text="@string/username"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -227,7 +227,7 @@
                 android:id="@+id/et_webdav_user"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="用户名"
+                android:hint="@string/username"
                 android:inputType="text"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -238,7 +238,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="密码"
+                android:text="@string/password"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginBottom="4dp" />
@@ -247,7 +247,7 @@
                 android:id="@+id/et_webdav_pass"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="密码"
+                android:hint="@string/password"
                 android:inputType="text"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
@@ -260,7 +260,7 @@
             android:id="@+id/btn_save"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="测试并保存配置"
+            android:text="@string/test_and_save_config"
             android:backgroundTint="@color/primary" />
 
         <LinearLayout
@@ -280,7 +280,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="正在测试连接…"
+                android:text="@string/testing_connection"
                 android:textSize="14sp"
                 android:textColor="@color/text_secondary" />
         </LinearLayout>

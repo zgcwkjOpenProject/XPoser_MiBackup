@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cloud Backup Assistant</string>
+    <string name="settings_name">Cloud Backup Assistant</string>
+    <string name="xposed_description">Cloud Backup Assistant - back up to your own cloud storage device</string>
+    <string name="author">zgcwkj</string>
+    <string name="author_url">http://www.zgcwkj.cn</string>
+    <string name="footer_text">Powered by <a href="http://www.zgcwkj.cn">zgcwkj</a></string>
+
+    <string name="action_backup">Backup</string>
+    <string name="tab_device_config">Device</string>
+    <string name="tab_service_config">Service</string>
+    <string name="title_device_config">Device settings</string>
+    <string name="title_service_config">Service settings</string>
+
+    <string name="device_name">Device name</string>
+    <string name="device_name_hint">Example: Remote backup device</string>
+    <string name="device_description">Device description</string>
+    <string name="device_description_hint">Example: My cloud backup device</string>
+    <string name="backup_path">Backup path</string>
+    <string name="backup_path_description">Root path used in cloud storage</string>
+    <string name="backup_path_hint">Example: MIUI/backup</string>
+    <string name="max_backup_count">Maximum backups</string>
+    <string name="max_backup_count_description">Automatically delete older backups when exceeded. Use 0 to keep all.</string>
+    <string name="write_error_log">Write error logs</string>
+    <string name="log_path_hint">/sdcard/MIUI/backup/logs/yyyyMMdd.log</string>
+    <string name="save_config">Save configuration</string>
+
+    <string name="backup_protocol">Backup protocol</string>
+    <string name="upload_threads">Upload threads</string>
+    <string name="server_address">Server address</string>
+    <string name="smb_server_hint">Example: 192.168.1.100</string>
+    <string name="port">Port</string>
+    <string name="share_folder">Shared folder</string>
+    <string name="share_folder_hint">Example: backup</string>
+    <string name="username_optional">Username (leave empty for anonymous)</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="webdav_url_hint">Example: https://192.168.1.100:8080/dav</string>
+    <string name="webdav_https_required">Android requires HTTPS, otherwise the connection will fail.</string>
+    <string name="test_and_save_config">Test and save configuration</string>
+    <string name="testing_connection">Testing connection...</string>
+
+    <string name="toast_device_id_required">Please enter a device ID in Device settings first.</string>
+    <string name="toast_backup_app_missing">Backup app not found. Please make sure Xiaomi Backup is installed.</string>
+    <string name="toast_config_saved">Configuration saved.</string>
+    <string name="toast_connection_success">Connection succeeded. Configuration saved.</string>
+    <string name="toast_connection_failed">Connection failed. Please check the settings.</string>
+</resources>
