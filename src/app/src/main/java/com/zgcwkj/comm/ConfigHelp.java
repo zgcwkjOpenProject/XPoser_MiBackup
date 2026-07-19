@@ -124,6 +124,7 @@ public class ConfigHelp {
         map.put("log_enabled", "false");
         map.put("protocol", "smb");
         map.put("upload_threads", "3");
+        map.put("chunk_size_mb", "64");
         map.put("smb_server", "192.168.68.1");
         map.put("smb_port", "445");
         map.put("smb_share", isChineseLocale() ? "备份数据" : "BackupData");
@@ -132,6 +133,7 @@ public class ConfigHelp {
         map.put("webdav_url", "https://192.168.1.1:8080/dav");
         map.put("webdav_user", "");
         map.put("webdav_pass", "");
+        map.put("custom_script_b64", "");
         return map;
     }
 

@@ -36,19 +36,34 @@
 
             <RadioButton
                 android:id="@+id/rb_smb"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:text="SMB/CIFS"
                 android:textColor="@color/text_primary"
-                android:checked="true"
-                android:layout_marginEnd="24dp" />
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:checked="true" />
 
             <RadioButton
                 android:id="@+id/rb_webdav"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:text="WebDAV"
-                android:textColor="@color/text_primary" />
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:maxLines="1" />
+
+            <RadioButton
+                android:id="@+id/rb_custom"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/custom_protocol"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:maxLines="1" />
         </RadioGroup>
 
         <TextView
@@ -64,6 +79,26 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="3"
+            android:inputType="number"
+            android:textColor="@color/text_primary"
+            android:background="@color/surface"
+            android:textColorHint="@color/text_hint"
+            android:padding="12dp"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/chunk_size_mb"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/et_chunk_size_mb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="64"
             android:inputType="number"
             android:textColor="@color/text_primary"
             android:background="@color/surface"
@@ -249,6 +284,40 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/password"
                 android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:background="@color/surface"
+                android:textColorHint="@color/text_hint"
+                android:padding="12dp"
+                android:layout_marginBottom="24dp" />
+        </LinearLayout>
+
+        <!-- 自定义HTTP脚本配置面板 -->
+        <LinearLayout
+            android:id="@+id/panel_custom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/custom_script"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/et_custom_script"
+                android:layout_width="match_parent"
+                android:layout_height="360dp"
+                android:gravity="top|start"
+                android:hint="@string/custom_script_hint"
+                android:inputType="textMultiLine|textNoSuggestions"
+                android:scrollbars="vertical"
+                android:overScrollMode="ifContentScrolls"
+                android:fontFamily="monospace"
+                android:textSize="12sp"
                 android:textColor="@color/text_primary"
                 android:background="@color/surface"
                 android:textColorHint="@color/text_hint"

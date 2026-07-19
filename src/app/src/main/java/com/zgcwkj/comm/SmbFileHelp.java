@@ -62,12 +62,25 @@ public class SmbFileHelp {
             }
         }
 
-        /** 创建远程目录链（rootDir/backupPath/remoteDir） */
+        /** 递归创建远程目录链 */
         void mkdirs(String remoteDir) {
-            var rootDir = backupPath.contains("/") ? backupPath.split("/")[0] : "MIUI";
-            mkdir(rootDir);
-            mkdir(backupPath);
-            mkdir(remoteDir);
+            mkdirsRecursive(backupPath);
+            mkdirsRecursive(remoteDir);
+        }
+
+        /** 按路径段逐级创建目录 */
+        void mkdirsRecursive(String path) {
+            if (path == null || path.isEmpty()) {
+                return;
+            }
+            var current = "";
+            for (var part : path.replace('\\', '/').split("/")) {
+                if (part == null || part.isEmpty()) {
+                    continue;
+                }
+                current = current.isEmpty() ? part : current + "/" + part;
+                mkdir(current);
+            }
         }
 
         @Override
@@ -184,20 +197,8 @@ public class SmbFileHelp {
 
             s.mkdirs(remoteDir);
             var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
-            var smbFile = s.share.openFile(remotePath,
-                EnumSet.of(AccessMask.GENERIC_WRITE, AccessMask.SYNCHRONIZE),
-                EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-                EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
-                SMB2CreateDisposition.FILE_OVERWRITE_IF,
-                EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
-
-            // try-with-resources保证异常时流和SMB文件句柄都被关闭
-            try (var fis = new FileInputStream(localFile); var fos = smbFile.getOutputStream()) {
-                var total = streamCopy(fis, fos);
-                return "OK: " + remotePath + " (" + total + " bytes)";
-            } finally {
-                try { smbFile.close(); } catch (Exception ignored) {}
-            }
+            uploadWholeFileToSmb(s.share, localFile, remotePath, null, "", 0L, localFile.length());
+            return "OK: " + remotePath + " (" + localFile.length() + " bytes)";
         }
     }
 
@@ -226,33 +227,21 @@ public class SmbFileHelp {
 
             s.mkdirs(remoteDir);
             var remotePath = (remoteDir != null && !remoteDir.isEmpty() ? remoteDir + "/" : "") + localFile.getName();
-            var smbFile = s.share.openFile(remotePath,
-                EnumSet.of(AccessMask.GENERIC_WRITE, AccessMask.SYNCHRONIZE),
-                EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-                EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
-                SMB2CreateDisposition.FILE_OVERWRITE_IF,
-                EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
-
-            try (var fis = new FileInputStream(localFile); var fos = smbFile.getOutputStream()) {
-                var buffer = new byte[BUFFER_SIZE];
-                var totalWritten = 0L;
-                var lastReportTime = 0L;
-                var bytesRead = 0;
-                while ((bytesRead = fis.read(buffer)) != -1) {
-                    fos.write(buffer, 0, bytesRead);
-                    fos.flush();
-                    totalWritten += bytesRead;
-                    var now = System.currentTimeMillis();
-                    if (progressListener != null && (now - lastReportTime >= 200 || totalWritten == fileSize)) {
-                        lastReportTime = now;
-                        notifyProgress(progressListener, taskId, totalWritten, fileSize);
-                    }
-                }
-            } finally {
-                try { smbFile.close(); } catch (Exception ignored) {}
-            }
+            uploadWholeFileToSmb(s.share, localFile, remotePath, progressListener, taskId, 0L, fileSize);
 
             notifyFinish(progressListener, taskId, 0, "success");
+        }
+    }
+
+    /**
+     * SMB整文件上传，CloudFileHelp会在进入这里前统一处理切片
+     */
+    private static long uploadWholeFileToSmb(DiskShare share, File localFile, String remotePath, Object progressListener, String taskId, long baseWritten, long totalSize) throws Exception {
+        var smbFile = openSmbOutput(share, remotePath);
+        try (var fis = new FileInputStream(localFile); var fos = smbFile.getOutputStream()) {
+            return streamCopyWithProgress(fis, fos, progressListener, taskId, baseWritten, totalSize);
+        } finally {
+            try { smbFile.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -261,16 +250,16 @@ public class SmbFileHelp {
     /** 下载单个文件从SMB到本地 */
     public static String downloadFile(String remotePath, String localPath) throws Exception {
         try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
+            var localFile = new File(localPath);
+            var parent = localFile.getParentFile();
+            if (parent != null) parent.mkdirs();
+
             var smbFile = s.share.openFile(remotePath,
                 EnumSet.of(AccessMask.GENERIC_READ, AccessMask.SYNCHRONIZE),
                 EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
                 EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
                 SMB2CreateDisposition.FILE_OPEN,
                 EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
-
-            var localFile = new File(localPath);
-            var parent = localFile.getParentFile();
-            if (parent != null) parent.mkdirs();
 
             // try-with-resources保证异常时输入输出流和SMB文件句柄都被关闭
             try (var is = smbFile.getInputStream(); var fos = new FileOutputStream(localFile)) {
@@ -282,122 +271,41 @@ public class SmbFileHelp {
         }
     }
 
-    /** 从SMB下载单个恢复文件到本地（根据文件名推断路径） */
-    public static void downloadFromSmb(String localPath) throws Exception {
-        var localFile = new File(localPath);
-        var dirName = localFile.getParentFile().getName();
-        var fileName = localFile.getName();
-        var backupPath = ConfigHelp.getString("backup_path", "");
-
-        if (fileName.equals("restoring")) {
-            var descriptFile = new File(localFile.getParent(), "descript.xml");
-            if (descriptFile.exists()) {
-                var content = new String(java.nio.file.Files.readAllBytes(descriptFile.toPath()));
-                var idx = content.indexOf("<bakFile>");
-                if (idx > 0) {
-                    var endIdx = content.indexOf("</bakFile>", idx);
-                    if (endIdx > 0) {
-                        var bakFileName = content.substring(idx + 9, endIdx);
-                        downloadFile(backupPath + "/" + dirName + "/" + bakFileName, localPath);
-                    }
-                }
-            }
-        } else {
-            downloadFile(backupPath + "/" + dirName + "/" + fileName, localPath);
-        }
-    }
-
-    // ========== 恢复辅助 ==========
-
-    /** 从SMB读取所有备份的descript.xml内容到内存 */
-    public static List<String> readBackupXmls() throws Exception {
-        var xmlList = new ArrayList<String>();
-        try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
-            var backupDirs = new ArrayList<String>();
-            for (var entry : s.share.list(s.backupPath)) {
-                var name = entry.getFileName();
-                if (!name.equals(".") && !name.equals("..") && (entry.getFileAttributes() & 0x10) != 0) {
-                    backupDirs.add(name);
-                }
-            }
-
-            for (var dirName : backupDirs) {
-                try {
-                    var smbFile = s.share.openFile(s.backupPath + "/" + dirName + "/descript.xml",
-                        EnumSet.of(AccessMask.GENERIC_READ, AccessMask.SYNCHRONIZE),
-                        EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-                        EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
-                        SMB2CreateDisposition.FILE_OPEN,
-                        EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
-                    // try-with-resources保证SMB文件句柄和输入流被关闭
-                    try (var is = smbFile.getInputStream()) {
-                        var xml = new String(is.readAllBytes(), "UTF-8");
-                        xmlList.add(dirName + "|" + xml);
-                    } finally {
-                        try { smbFile.close(); } catch (Exception ignored) {}
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
-        return xmlList;
-    }
-
-    /** 列出备份目录名并下载各自的descript.xml到本地 */
-    public static String listAndDownloadXml(String localTempPath) throws Exception {
-        try (var s = new SmbSession(ConfigHelp.getString("smb_share", ""))) {
-            var backupDirs = new ArrayList<String>();
-            for (var entry : s.share.list(s.backupPath)) {
-                var name = entry.getFileName();
-                if (!name.equals(".") && !name.equals("..") && (entry.getFileAttributes() & 0x10) != 0) {
-                    backupDirs.add(name);
-                }
-            }
-
-            var result = new StringBuilder();
-            for (var dirName : backupDirs) {
-                try {
-                    var localDir = new File(localTempPath, dirName);
-                    localDir.mkdirs();
-
-                    var smbFile = s.share.openFile(s.backupPath + "/" + dirName + "/descript.xml",
-                        EnumSet.of(AccessMask.GENERIC_READ, AccessMask.SYNCHRONIZE),
-                        EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-                        EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
-                        SMB2CreateDisposition.FILE_OPEN,
-                        EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
-
-                    // try-with-resources保证异常时输入输出流和SMB文件句柄都被关闭
-                    var localFile = new File(localDir, "descript.xml");
-                    try (var is = smbFile.getInputStream(); var fos = new FileOutputStream(localFile)) {
-                        streamCopy(is, fos);
-                    } finally {
-                        try { smbFile.close(); } catch (Exception ignored) {}
-                    }
-
-                    var rstFile = new File(localDir, "restoring");
-                    if (!rstFile.exists()) rstFile.createNewFile();
-
-                    if (result.length() > 0) result.append(",");
-                    result.append(dirName);
-                } catch (Exception ignored) {}
-            }
-            return result.toString();
-        }
-    }
-
     // ========== 工具方法 ==========
 
     /** 流拷贝（不负责关闭流，由调用方用try-with-resources管理） */
     private static long streamCopy(java.io.InputStream in, java.io.OutputStream out) throws Exception {
+        return streamCopyWithProgress(in, out, null, "", 0L, 0L);
+    }
+
+    /** 流拷贝并按时间间隔回调上传进度 */
+    private static long streamCopyWithProgress(java.io.InputStream in, java.io.OutputStream out, Object listener, String taskId, long baseWritten, long totalSize) throws Exception {
         var buffer = new byte[BUFFER_SIZE];
         var total = 0L;
+        var lastReportTime = 0L;
         var bytesRead = 0;
         while ((bytesRead = in.read(buffer)) != -1) {
             out.write(buffer, 0, bytesRead);
             out.flush();
             total += bytesRead;
+            var current = baseWritten + total;
+            var now = System.currentTimeMillis();
+            if (listener != null && (now - lastReportTime >= 200 || current == totalSize)) {
+                lastReportTime = now;
+                notifyProgress(listener, taskId, current, totalSize);
+            }
         }
         return total;
+    }
+
+    /** 打开SMB远端文件用于覆盖写入 */
+    private static com.hierynomus.smbj.share.File openSmbOutput(DiskShare share, String remotePath) {
+        return share.openFile(remotePath,
+            EnumSet.of(AccessMask.GENERIC_WRITE, AccessMask.SYNCHRONIZE),
+            EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
+            EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
+            SMB2CreateDisposition.FILE_OVERWRITE_IF,
+            EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
     }
 
     /** IFileOperationProgressListener回调：通知进度 */

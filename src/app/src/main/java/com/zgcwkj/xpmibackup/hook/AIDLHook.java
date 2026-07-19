@@ -671,7 +671,7 @@ public class AIDLHook {
         if (path.startsWith(".AppBackup/")) {
             path = path.substring(".AppBackup/".length());
         }
-        var path2 = cleanRemotePathSegments(path.replace(".AllBackup/", ""));
+        var path2 = cleanRemotePathSegments(path);
         return path2.isEmpty() ? backupPath : backupPath + "/" + path2;
     }
 
@@ -703,7 +703,7 @@ public class AIDLHook {
     }
 
     /**
-     * 移除DFS虚拟点目录，确保远端路径使用MIUI/backup/date而不是.AllBackup/date
+     * 移除DFS虚拟目录，保留备份数据里的真实隐藏文件
      */
     private static String cleanRemotePathSegments(String path) {
         if (path == null || path.isEmpty()) {
@@ -711,12 +711,14 @@ public class AIDLHook {
         }
         var cleaned = new StringBuilder();
         for (var segment : path.split("/")) {
-            if (segment != null && !segment.isEmpty() && !segment.startsWith(".")) {
-                if (cleaned.length() > 0) {
-                    cleaned.append("/");
-                }
-                cleaned.append(segment);
+            if (segment == null || segment.isEmpty() || ".".equals(segment) || "..".equals(segment)
+                || ".AllBackup".equals(segment) || ".AppBackup".equals(segment)) {
+                continue;
             }
+            if (cleaned.length() > 0) {
+                cleaned.append("/");
+            }
+            cleaned.append(segment);
         }
         return cleaned.toString();
     }

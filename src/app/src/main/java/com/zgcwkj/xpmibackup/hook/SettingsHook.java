@@ -248,7 +248,11 @@ public class SettingsHook {
      */
     private void hookBackupNasDeviceProvider(XC_LoadPackage.LoadPackageParam lpparam) {
         try {
-            var clazz = XposedHelpers.findClass("com.miui.backup.provider.BackupNasDeviceProvider", lpparam.classLoader);
+            var clazz = XposedHelpers.findClassIfExists("com.miui.backup.provider.BackupNasDeviceProvider", lpparam.classLoader);
+            if (clazz == null) {
+                LogHelp.w(TAG, "BackupNasDeviceProvider not found, skip provider hook");
+                return;
+            }
             final var deviceId = com.zgcwkj.comm.ConfigHelp.getString("device_id", "");
             final var deviceName = com.zgcwkj.comm.ConfigHelp.getString("device_name", "");
             XposedHelpers.findAndHookMethod(clazz, "query",

@@ -35,28 +35,11 @@ public class MainActivity extends Activity {
         findViewById(R.id.tab_device).setOnClickListener(v -> switchTab("device"));
         findViewById(R.id.tab_service).setOnClickListener(v -> switchTab("service"));
 
-        // 顶部"备份"按钮：跳转到小米备份APP的智能存储(NAS)备份页面(NASHomeActivity)
-        // 用 intent action 跳转，action 名不被混淆，比直接指定类名更稳
-        // 必须传 deviceId/deviceName：NASHomeActivity.onCreate 会读这两个 extra，
-        // deviceId 传给 DistFileClientService.setDeviceId，缺失则连接时 "device id is null" 失败
-        findViewById(R.id.btn_open_backup).setOnClickListener(v -> {
-            var deviceId = com.zgcwkj.comm.ConfigHelp.getString("device_id", "");
-            var deviceName = com.zgcwkj.comm.ConfigHelp.getString("device_name", "");
-            if (deviceId.isEmpty()) {
-                android.widget.Toast.makeText(this, R.string.toast_device_id_required,
-                    android.widget.Toast.LENGTH_SHORT).show();
-                return;
-            }
-            var intent = new Intent("miui.intent.backup.NAS_HOME_ACTIVITY");
-            intent.putExtra("deviceId", deviceId);
-            intent.putExtra("deviceName", deviceName);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                startActivity(intent);
-            } catch (Exception e) {
-                android.widget.Toast.makeText(this, R.string.toast_backup_app_missing,
-                    android.widget.Toast.LENGTH_SHORT).show();
-            }
+        var backupButton = findViewById(R.id.btn_open_backup);
+        backupButton.setOnClickListener(v -> openBackupHome());
+        backupButton.setOnLongClickListener(v -> {
+            openBackupUpgradePage();
+            return true;
         });
 
         // 状态栏占位：动态设置空白View高度为状态栏高度
@@ -75,6 +58,47 @@ public class MainActivity extends Activity {
         }
 
         if (savedInstanceState == null) switchTab("device");
+    }
+
+    /**
+     * 顶部"备份"按钮点击：跳转到小米备份APP的智能存储(NAS)备份页面
+     * 使用公开action跳转，action名不被混淆，比直接指定类名更稳
+     */
+    private void openBackupHome() {
+        var deviceId = com.zgcwkj.comm.ConfigHelp.getString("device_id", "");
+        var deviceName = com.zgcwkj.comm.ConfigHelp.getString("device_name", "");
+        if (deviceId.isEmpty()) {
+            android.widget.Toast.makeText(this, R.string.toast_device_id_required,
+                android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        var intent = new Intent("miui.intent.backup.NAS_HOME_ACTIVITY");
+        intent.putExtra("deviceId", deviceId);
+        intent.putExtra("deviceName", deviceName);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, R.string.toast_backup_app_missing,
+                android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 顶部"备份"按钮长按：打开小米应用商店中的系统备份升级页
+     * detailcard路由可进入系统应用详情，否则普通details会提示暂未收录
+     */
+    private void openBackupUpgradePage() {
+        var intent = new Intent(Intent.ACTION_VIEW,
+            Uri.parse("mimarket://details/detailcard?id=com.miui.backup&detailStyle=1"));
+        intent.setPackage("com.xiaomi.market");
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, R.string.toast_market_app_missing,
+                android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     /**

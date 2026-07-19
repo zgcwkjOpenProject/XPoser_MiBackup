@@ -50,7 +50,10 @@ public class WebdavFileHelp {
             };
             var builder = new OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS);
+                .readTimeout(10, TimeUnit.MINUTES)
+                .writeTimeout(10, TimeUnit.MINUTES)
+                .retryOnConnectionFailure(true)
+                .protocols(java.util.List.of(okhttp3.Protocol.HTTP_1_1));
             try {
                 var sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
                 sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
@@ -347,84 +350,6 @@ public class WebdavFileHelp {
                 return "OK: " + remotePath + " -> " + localPath + " (" + total + " bytes)";
             }
         }
-    }
-
-    /** 从WebDAV下载恢复文件到本地 */
-    public static void downloadFromWebdav(String localPath) throws Exception {
-        var localFile = new File(localPath);
-        var dirName = localFile.getParentFile().getName();
-        var fileName = localFile.getName();
-        var backupPath = ConfigHelp.getString("backup_path", "");
-
-        if (fileName.equals("restoring")) {
-            var descriptFile = new File(localFile.getParent(), "descript.xml");
-            if (descriptFile.exists()) {
-                var content = new String(java.nio.file.Files.readAllBytes(descriptFile.toPath()));
-                var idx = content.indexOf("<bakFile>");
-                if (idx > 0) {
-                    var endIdx = content.indexOf("</bakFile>", idx);
-                    if (endIdx > 0) {
-                        var bakFileName = content.substring(idx + 9, endIdx);
-                        downloadFile(backupPath + "/" + dirName + "/" + bakFileName, localPath);
-                    }
-                }
-            }
-        } else {
-            downloadFile(backupPath + "/" + dirName + "/" + fileName, localPath);
-        }
-    }
-
-    // ========== 恢复辅助 ==========
-
-    /** 从WebDAV读取所有备份的descript.xml内容到内存 */
-    public static List<String> readBackupXmls() throws Exception {
-        var xmlList = new ArrayList<String>();
-        var backupPath = ConfigHelp.getString("backup_path", "");
-        var backupDirs = listDirectory(backupPath);
-
-        for (var dirName : backupDirs) {
-            try {
-                var request = newRequest(baseUrl() + backupPath + "/" + dirName + "/descript.xml").get().build();
-                try (var resp = getClient().newCall(request).execute()) {
-                    if (resp.code() == 200 && resp.body() != null) {
-                        var xml = resp.body().string();
-                        xmlList.add(dirName + "|" + xml);
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-        return xmlList;
-    }
-
-    /** 列出备份目录名并下载各自的descript.xml到本地 */
-    public static String listAndDownloadXml(String localTempPath) throws Exception {
-        var backupPath = ConfigHelp.getString("backup_path", "");
-        var backupDirs = listDirectory(backupPath);
-        var result = new StringBuilder();
-
-        for (var dirName : backupDirs) {
-            try {
-                var localDir = new File(localTempPath, dirName);
-                localDir.mkdirs();
-                var url = baseUrl() + backupPath + "/" + dirName + "/descript.xml";
-
-                // 直接GET：文件不存在时服务器返回404，省掉一次HEAD往返
-                var getRequest = newRequest(url).get().build();
-                try (var getResp = getClient().newCall(getRequest).execute()) {
-                    if (getResp.code() == 200 && getResp.body() != null) {
-                        var localFile = new File(localDir, "descript.xml");
-                        try (var is = getResp.body().byteStream(); var fos = new FileOutputStream(localFile)) {
-                            streamCopy(is, fos);
-                        }
-                        var rstFile = new File(localDir, "restoring");
-                        if (!rstFile.exists()) rstFile.createNewFile();
-                    }
-                }
-                if (result.length() > 0) result.append(",");
-                result.append(dirName);
-            } catch (Exception ignored) {}
-        }
-        return result.toString();
     }
 
     // ========== 工具方法 ==========
