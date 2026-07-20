@@ -42,7 +42,7 @@
     <string name="custom_protocol">Custom</string>
     <string name="custom_script">Custom JS script</string>
     <string name="custom_script_hint">Write server URL and token in the script</string>
-    <string name="test_and_save_config">Test and save configuration</string>
+    <string name="test_and_save_config">Save and test configuration</string>
     <string name="testing_connection">Testing connection...</string>
 
     <string name="toast_device_id_required">Please enter a device ID in Device settings first.</string>
@@ -50,5 +50,5 @@
     <string name="toast_market_app_missing">Xiaomi App Store not found.</string>
     <string name="toast_config_saved">Configuration saved.</string>
     <string name="toast_connection_success">Connection succeeded. Configuration saved.</string>
-    <string name="toast_connection_failed">Connection failed. Please check the settings.</string>
+    <string name="toast_connection_failed">Configuration saved, but the connection failed. Please check the settings.</string>
 </resources>

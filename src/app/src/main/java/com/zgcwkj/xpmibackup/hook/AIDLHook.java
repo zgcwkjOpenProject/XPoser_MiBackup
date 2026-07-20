@@ -33,7 +33,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 将小米DFS AIDL调用重定向到SMB/WebDAV
+ * 将小米DFS AIDL调用重定向到当前云端备份协议
  * Hook停留在公开DFS服务边界，备份和恢复仍走小米自己的SDK包装层，避免直接Hook备份应用里的混淆业务函数
  */
 public class AIDLHook {
@@ -407,7 +407,7 @@ public class AIDLHook {
     }
 
     /**
-     * 从SMB/WebDAV读取目录，并转换成小米NAS恢复列表需要的结果
+     * 从当前云端备份协议读取目录，并转换成小米NAS恢复列表需要的结果
      */
     public void sendMockList(String remotePath, Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
@@ -635,7 +635,7 @@ public class AIDLHook {
     }
 
     /**
-     * 把DFS虚拟路径转换为真实SMB/WebDAV远端路径
+     * 把DFS虚拟路径转换为当前云端备份协议使用的远端路径
      */
     private static String normalizeRemotePath(String aidlPath) {
         if (aidlPath == null || aidlPath.isEmpty()) {
@@ -899,7 +899,7 @@ public class AIDLHook {
     }
 
     /**
-     * 从ParcelFileDescriptor读取备份文件并上传到SMB/WebDAV
+     * 从ParcelFileDescriptor读取备份文件并上传到当前云端备份协议
      */
     private void uploadViaFd(ParcelFileDescriptor pfd, String aidlPath, Object listener, String taskId) throws Exception {
         var remotePath = normalizeRemotePath(aidlPath);
@@ -940,7 +940,7 @@ public class AIDLHook {
     }
 
     /**
-     * 从SMB/WebDAV下载文件并写入ParcelFileDescriptor
+     * 从当前云端备份协议下载文件并写入ParcelFileDescriptor
      */
     private void downloadViaFd(String aidlPath, ParcelFileDescriptor pfd, Object listener, String taskId) throws Exception {
         var remotePath = normalizeRemotePath(aidlPath);

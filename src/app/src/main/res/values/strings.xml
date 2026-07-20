@@ -42,7 +42,7 @@
     <string name="custom_protocol">自定义</string>
     <string name="custom_script">自定义 JS 脚本</string>
     <string name="custom_script_hint">服务器地址和 Token 写在脚本里</string>
-    <string name="test_and_save_config">测试并保存配置</string>
+    <string name="test_and_save_config">保存并测试配置</string>
     <string name="testing_connection">正在测试连接…</string>
 
     <string name="toast_device_id_required">请先在设备配置中填写设备ID</string>
@@ -50,5 +50,5 @@
     <string name="toast_market_app_missing">未找到小米应用商店</string>
     <string name="toast_config_saved">配置已保存</string>
     <string name="toast_connection_success">连接成功，配置已保存</string>
-    <string name="toast_connection_failed">连接失败，请检查参数</string>
+    <string name="toast_connection_failed">配置已保存，但连接失败，请检查参数</string>
 </resources>

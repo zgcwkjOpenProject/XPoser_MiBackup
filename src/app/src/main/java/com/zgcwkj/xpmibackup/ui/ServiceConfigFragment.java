@@ -28,7 +28,8 @@ import java.util.Base64;
  * 管理云端传输协议及连接参数的读写
  * SMB参数：服务器地址、端口、共享文件夹、用户名、密码
  * WebDAV参数：服务器地址(URL)、用户名、密码
- * 保存时先测试连接，连接成功才保存
+ * 自定义HTTP参数：一段完整JS脚本
+ * 保存后立即测试连接，并把测试结果反馈给用户
  */
 public class ServiceConfigFragment extends Fragment {
 
@@ -45,14 +46,14 @@ public class ServiceConfigFragment extends Fragment {
 
     /**
      * 创建服务配置界面视图
-     * 绑定协议切换、SMB/WebDAV参数输入框，加载已有配置
-     * 保存按钮点击后先测试连接再保存
+     * 绑定协议切换和各协议参数输入框，加载已有配置
+     * 保存按钮点击后写入配置并测试连接
      */
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         var view = inflater.inflate(R.layout.fragment_service_config, container, false);
 
-        // 界面控件元素
+        // 绑定界面控件
         rgProtocol = view.findViewById(R.id.rg_protocol);
         rbSmb = view.findViewById(R.id.rb_smb);
         rbWebdav = view.findViewById(R.id.rb_webdav);
@@ -83,7 +84,6 @@ public class ServiceConfigFragment extends Fragment {
         btnSave = view.findViewById(R.id.btn_save);
         testingPanel = view.findViewById(R.id.testing_panel);
 
-        // 加载配置
         loadConfig();
 
         // 协议切换时显示/隐藏对应的配置面板
@@ -91,7 +91,7 @@ public class ServiceConfigFragment extends Fragment {
             showProtocolPanel(checkedId);
         });
 
-        // 保存按钮：先保存再测试连接
+        // 保存后测试连接，失败时保留输入方便继续修改
         btnSave.setOnClickListener(v -> testAndSave());
 
         // 底部链接
@@ -105,7 +105,7 @@ public class ServiceConfigFragment extends Fragment {
     }
 
     /**
-     * 先写入临时配置，测试连接，成功则保存，失败则提示检查参数
+     * 先写入配置，再用当前配置测试连接；失败时保留输入方便继续修改
      * 后台线程执行网络测试，主线程更新UI
      */
     private void testAndSave() {
@@ -115,7 +115,7 @@ public class ServiceConfigFragment extends Fragment {
         testingPanel.setVisibility(View.VISIBLE);
 
         new Thread(() -> {
-            // 保存到配置文件（testConnection会读取配置）
+            // testConnection会从配置文件读取最新协议参数
             saveConfig();
             var ok = com.zgcwkj.comm.CloudFileHelp.testConnection();
 

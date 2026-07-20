@@ -176,7 +176,8 @@ public class CloudFileHelp {
                         var xml = new String(java.nio.file.Files.readAllBytes(local.toPath()), java.nio.charset.StandardCharsets.UTF_8);
                         xmlList.add(dirName + "|" + xml);
                     }
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    logError("readBackupXmls descript failed [dir=" + dirName + "]", e);
                 } finally {
                     deleteTempFile(local);
                 }
@@ -206,8 +207,11 @@ public class CloudFileHelp {
                         if (!rstFile.exists()) rstFile.createNewFile();
                         if (result.length() > 0) result.append(",");
                         result.append(dirName);
+                    } else {
+                        logError("listAndDownloadXml descript failed [dir=" + dirName + ", result=" + downloaded + "]", new IllegalStateException("download descript.xml failed"));
                     }
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    logError("listAndDownloadXml descript failed [dir=" + dirName + "]", e);
                 }
             }
             return result.toString();
@@ -357,11 +361,23 @@ public class CloudFileHelp {
 
         var manifestFile = File.createTempFile("mibak_manifest", ".json", parent);
         try {
-            var manifestResult = downloadSingle(remotePath + MANIFEST_SUFFIX, manifestFile.getAbsolutePath());
+            var manifestResult = "";
+            try {
+                manifestResult = downloadSingle(remotePath + MANIFEST_SUFFIX, manifestFile.getAbsolutePath());
+            } catch (Exception e) {
+                LogHelp.d(TAG, "chunk manifest not found, fallback to single file: " + remotePath + MANIFEST_SUFFIX);
+                return null;
+            }
             if (manifestResult == null || manifestResult.startsWith("ERROR:")) {
                 return null;
             }
-            var manifest = new JSONObject(new String(java.nio.file.Files.readAllBytes(manifestFile.toPath()), java.nio.charset.StandardCharsets.UTF_8));
+            var manifest = (JSONObject) null;
+            try {
+                manifest = new JSONObject(new String(java.nio.file.Files.readAllBytes(manifestFile.toPath()), java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                LogHelp.d(TAG, "invalid chunk manifest, fallback to single file: " + remotePath + MANIFEST_SUFFIX);
+                return null;
+            }
             var parts = manifest.optLong("parts", 0L);
             if (parts <= 0) {
                 return null;

@@ -1,6 +1,8 @@
 package com.zgcwkj.comm;
 
 import org.json.JSONArray;
+import org.json.JSONObject;
+import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.Scriptable;
@@ -11,6 +13,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -29,7 +32,7 @@ import com.zgcwkj.xpmibackup.R;
 
 /**
  * 自定义HTTP存储适配器
- * 用户脚本只生成请求描述，文件读取、切片、进度和合并仍由Java负责
+ * 用户脚本负责描述或直接完成具体HTTP操作，文件切片和manifest合并由CloudFileHelp统一处理
  */
 public class CustomHttpFileHelp {
 
@@ -41,8 +44,10 @@ public class CustomHttpFileHelp {
     private static volatile OkHttpClient sClient;
 
     private static volatile String sDefaultScript;
+    private static final ThreadLocal<UploadContext> sUploadContext = new ThreadLocal<>();
+    private static final ThreadLocal<DownloadContext> sDownloadContext = new ThreadLocal<>();
 
-    /** 设置页首次打开时展示的脚本模板；实际内容维护在res/raw/custom_http_default.js */
+    /** 设置页首次打开时展示的脚本模板；实际内容维护在res/raw/custom_default.js */
     public static String getDefaultScript() {
         return getDefaultScript(null);
     }
@@ -63,13 +68,15 @@ public class CustomHttpFileHelp {
 
     // ========== 公共方法 ==========
 
-    /** 测试自定义脚本生成的连接请求是否返回2xx/3xx */
+    /** 测试自定义脚本连接；具体请求和成功条件都由脚本判断，必须返回true或false */
     public static boolean testConnection() throws Exception {
         var ctx = baseCtx();
         ctx.put("remoteDir", ConfigHelp.getString("backup_path", ""));
-        var resp = execute(callRequestFunction("testConnection", ctx, null), null);
-        closeQuietly(resp);
-        return resp.code >= 200 && resp.code < 400;
+        var result = callFunction("testConnection", ctx, null, true);
+        if (result instanceof Boolean) {
+            return (Boolean) result;
+        }
+        throw new IllegalArgumentException("custom script testConnection must return true or false");
     }
 
     /** 列出备份根目录下的备份目录名 */
@@ -84,11 +91,15 @@ public class CustomHttpFileHelp {
         return dirs;
     }
 
-    /** 通过脚本的listEntries/parseList函数读取远端目录条目 */
+    /** 通过脚本读取远端目录条目；支持直接返回条目数组或返回请求对象后交给parseList解析 */
     public static List<CloudFileHelp.RemoteEntry> listEntries(String remoteDir) throws Exception {
         var ctx = baseCtx();
         ctx.put("remoteDir", remoteDir != null ? remoteDir : "");
-        var resp = execute(callRequestFunction("listEntries", ctx, null), null);
+        var result = callFunction("listEntries", ctx, null, true);
+        if (!isRequestObject(result)) {
+            return toEntries(result);
+        }
+        var resp = execute(toRequestSpec(result), null);
         try {
             if (resp.code < 200 || resp.code >= 400) {
                 return List.of();
@@ -121,33 +132,48 @@ public class CustomHttpFileHelp {
 
     /** 下载单个普通文件，manifest合并由CloudFileHelp统一处理 */
     public static String downloadFile(String remotePath, String localPath) throws Exception {
-        var directResp = execute(callRequestFunction("downloadFile", withRemotePath(remotePath), null), null, false);
+        var ctx = withRemotePath(remotePath);
+        ctx.put("localPath", localPath != null ? localPath : "");
+        sDownloadContext.set(new DownloadContext(new File(localPath)));
         try {
-            if (directResp.code < 200 || directResp.code >= 300 || directResp.response == null || directResp.response.body() == null) {
-                return "ERROR: HTTP " + directResp.code;
+            var result = callFunction("downloadFile", ctx, null, true);
+            if (isHandledResult(result)) {
+                return "OK: " + remotePath + " -> " + localPath;
             }
-            var localFile = new File(localPath);
-            var parent = localFile.getParentFile();
-            if (parent != null) parent.mkdirs();
-            try (var is = directResp.response.body().byteStream(); var fos = new FileOutputStream(localFile)) {
-                copyStream(is, fos);
+            var directResp = execute(toRequestSpec(result), null, false);
+            try {
+                if (directResp.code < 200 || directResp.code >= 300 || directResp.response == null || directResp.response.body() == null) {
+                    return "ERROR: HTTP " + directResp.code;
+                }
+                var localFile = new File(localPath);
+                var parent = localFile.getParentFile();
+                if (parent != null) parent.mkdirs();
+                try (var is = directResp.response.body().byteStream(); var fos = new FileOutputStream(localFile)) {
+                    copyStream(is, fos);
+                }
+                return "OK: " + remotePath + " -> " + localPath;
+            } finally {
+                closeQuietly(directResp);
             }
-            return "OK: " + remotePath + " -> " + localPath;
         } finally {
-            closeQuietly(directResp);
+            sDownloadContext.remove();
         }
     }
 
     /** 删除远端目录；递归行为由用户脚本对应的服务器接口决定 */
     public static void deleteDir(String remoteDir) throws Exception {
         var ctx = withRemotePath(remoteDir);
-        var resp = execute(callRequestFunction("deletePath", ctx, null), null);
+        var result = callFunction("deletePath", ctx, null, true);
+        if (isHandledResult(result)) {
+            return;
+        }
+        var resp = execute(toRequestSpec(result), null);
         closeQuietly(resp);
     }
 
     // ========== 上传下载实现 ==========
 
-    /** 上传单个普通文件，脚本只负责生成请求描述 */
+    /** 上传单个普通文件；脚本可以自行完成，也可以返回HTTP请求描述交给Java执行 */
     private static void uploadFile(File localFile, String remoteDir, Object listener, String taskId) throws Exception {
         if (!localFile.exists()) throw new FileNotFoundException("file not found: " + localFile.getAbsolutePath());
 
@@ -157,15 +183,26 @@ public class CustomHttpFileHelp {
         ctx.put("remoteDir", remoteDir != null ? remoteDir : "");
         ctx.put("fileName", localFile.getName());
         ctx.put("fileSize", fileSize);
+        ctx.put("contentHash", sha256(localFile));
+        ctx.put("contentHashAlgorithm", "SHA256");
 
-        var body = new FileRequestBody(localFile, listener, taskId);
-        var resp = execute(callRequestFunction("uploadFile", ctx, null), body);
+        sUploadContext.set(new UploadContext(localFile, listener, taskId));
         try {
-            if (resp.code < 200 || resp.code >= 300) {
-                throw new IOException("upload file failed: HTTP " + resp.code);
+            var result = callFunction("uploadFile", ctx, null, true);
+            if (isHandledResult(result)) {
+                return;
+            }
+            var body = new FileRequestBody(localFile, listener, taskId);
+            var resp = execute(toRequestSpec(result), body);
+            try {
+                if (resp.code < 200 || resp.code >= 300) {
+                    throw new IOException("upload file failed: HTTP " + resp.code);
+                }
+            } finally {
+                closeQuietly(resp);
             }
         } finally {
-            closeQuietly(resp);
+            sUploadContext.remove();
         }
     }
 
@@ -219,12 +256,6 @@ public class CustomHttpFileHelp {
         return !"GET".equals(method) && !"HEAD".equals(method);
     }
 
-    /** 调用必须返回HTTP请求对象的脚本函数 */
-    private static RequestSpec callRequestFunction(String functionName, Map<String, Object> ctx, Map<String, Object> response) throws Exception {
-        var result = callFunction(functionName, ctx, response, true);
-        return toRequestSpec(result);
-    }
-
     /** 调用可选脚本函数，例如parseList不存在时让调用方走默认处理 */
     private static Object callOptionalFunction(String functionName, Map<String, Object> ctx, Map<String, Object> response) throws Exception {
         return callFunction(functionName, ctx, response, false);
@@ -238,6 +269,7 @@ public class CustomHttpFileHelp {
             cx.setLanguageVersion(Context.VERSION_ES6);
             cx.setClassShutter(className -> false);
             var scope = cx.initStandardObjects();
+            installUtilityFunctions(scope);
             cx.evaluateString(scope, script(), "custom-storage.js", 1, null);
             var fn = ScriptableObject.getProperty(scope, functionName);
             if (!(fn instanceof org.mozilla.javascript.Function)) {
@@ -274,6 +306,8 @@ public class CustomHttpFileHelp {
         spec.method = stringProperty(obj, "method", "GET");
         spec.url = stringProperty(obj, "url", "");
         spec.body = stringProperty(obj, "body", null);
+        spec.streamFile = optionalBooleanProperty(obj, "streamFile");
+        spec.readBody = optionalBooleanProperty(obj, "readBody");
         var headers = ScriptableObject.getProperty(obj, "headers");
         if (headers instanceof Scriptable) {
             for (var id : ((Scriptable) headers).getIds()) {
@@ -285,6 +319,23 @@ public class CustomHttpFileHelp {
             }
         }
         return spec;
+    }
+
+    /** 判断脚本是否已经自己完成了当前操作 */
+    private static boolean isHandledResult(Object value) {
+        if (!(value instanceof Scriptable)) {
+            return false;
+        }
+        return booleanProperty((Scriptable) value, "handled", false);
+    }
+
+    /** 判断脚本返回值是否是Java可继续执行的HTTP请求对象 */
+    private static boolean isRequestObject(Object value) {
+        if (!(value instanceof Scriptable)) {
+            return false;
+        }
+        var obj = (Scriptable) value;
+        return hasProperty(obj, "url") || hasProperty(obj, "method") || hasProperty(obj, "headers") || hasProperty(obj, "body");
     }
 
     /** 将脚本数组或JSON数组转换成统一的远端目录条目 */
@@ -337,11 +388,13 @@ public class CustomHttpFileHelp {
             longProperty(obj, "modifiedTime", System.currentTimeMillis()));
     }
 
+    /** 从脚本对象读取字符串属性，缺省时返回默认值 */
     private static String stringProperty(Scriptable obj, String name, String def) {
         var value = ScriptableObject.getProperty(obj, name);
         return value == null || value == Scriptable.NOT_FOUND ? def : Context.toString(value);
     }
 
+    /** 从脚本对象读取长整型属性，失败时返回默认值 */
     private static long longProperty(Scriptable obj, String name, long def) {
         try {
             var value = ScriptableObject.getProperty(obj, name);
@@ -351,9 +404,25 @@ public class CustomHttpFileHelp {
         }
     }
 
+    /** 从脚本对象读取布尔属性，缺省时返回默认值 */
     private static boolean booleanProperty(Scriptable obj, String name, boolean def) {
         var value = ScriptableObject.getProperty(obj, name);
         return value == null || value == Scriptable.NOT_FOUND ? def : Context.toBoolean(value);
+    }
+
+    /** 从脚本对象读取可空布尔属性 */
+    private static Boolean optionalBooleanProperty(Scriptable obj, String name) {
+        var value = ScriptableObject.getProperty(obj, name);
+        if (value == null || value == Scriptable.NOT_FOUND) {
+            return null;
+        }
+        return Context.toBoolean(value);
+    }
+
+    /** 判断脚本对象是否包含指定属性 */
+    private static boolean hasProperty(Scriptable obj, String name) {
+        var value = ScriptableObject.getProperty(obj, name);
+        return value != null && value != Scriptable.NOT_FOUND;
     }
 
     // ========== 工具方法 ==========
@@ -386,6 +455,205 @@ public class CustomHttpFileHelp {
         return ctx;
     }
 
+    /** 给JS脚本提供HTTP请求、状态存取、编码和哈希等通用工具 */
+    private static void installUtilityFunctions(Scriptable scope) {
+        // 脚本内的原始HTTP请求入口
+        ScriptableObject.putProperty(scope, "httpRequest", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                try {
+                    var spec = args.length > 0 ? toRequestSpec(args[0]) : null;
+                    if (spec == null) {
+                        throw new IllegalArgumentException("httpRequest expects a request object");
+                    }
+                    var streamBody = Boolean.TRUE.equals(spec.streamFile) ? currentUploadBody() : null;
+                    var readBody = spec.readBody == null || spec.readBody;
+                    var response = execute(spec, streamBody, readBody);
+                    return responseToScriptObject(scope, response);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        // 脚本内把文本编码成Base64
+        ScriptableObject.putProperty(scope, "base64Encode", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                return base64EncodeText(args.length > 0 ? Context.toString(args[0]) : "");
+            }
+        });
+        // 脚本内把Base64解码回UTF-8文本
+        ScriptableObject.putProperty(scope, "base64Decode", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                return base64DecodeText(args.length > 0 ? Context.toString(args[0]) : "");
+            }
+        });
+        // 脚本内计算任意算法的十六进制摘要
+        ScriptableObject.putProperty(scope, "hashHex", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                var algorithm = args.length > 0 ? Context.toString(args[0]) : "MD5";
+                var value = args.length > 1 ? Context.toString(args[1]) : "";
+                return hashHex(algorithm, value);
+            }
+        });
+        // 脚本内把远端响应流直接写入当前下载目标文件
+        ScriptableObject.putProperty(scope, "httpDownload", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                try {
+                    var spec = args.length > 0 ? toRequestSpec(args[0]) : null;
+                    if (spec == null) {
+                        throw new IllegalArgumentException("httpDownload expects a request object");
+                    }
+                    var target = currentDownloadTarget();
+                    var response = execute(spec, null, false);
+                    try {
+                        if (response.code >= 200 && response.code < 300 && response.response != null && response.response.body() != null) {
+                            var parent = target.getParentFile();
+                            if (parent != null) {
+                                parent.mkdirs();
+                            }
+                            try (var in = response.response.body().byteStream(); var fos = new FileOutputStream(target)) {
+                                copyStream(in, fos);
+                            }
+                        }
+                        return responseToScriptObject(scope, response);
+                    } finally {
+                        closeQuietly(response);
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        // 脚本内读取持久化状态
+        ScriptableObject.putProperty(scope, "stateGet", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                var key = args.length > 0 ? Context.toString(args[0]) : "";
+                var def = args.length > 1 ? Context.toString(args[1]) : "";
+                return getScriptState(key, def);
+            }
+        });
+        // 脚本内写入持久化状态
+        ScriptableObject.putProperty(scope, "stateSet", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                var key = args.length > 0 ? Context.toString(args[0]) : "";
+                var value = args.length > 1 ? Context.toString(args[1]) : "";
+                setScriptState(key, value);
+                return value;
+            }
+        });
+    }
+
+    /** 读取JS脚本持久化状态，比如脚本刷新后的Cookie或token */
+    private static synchronized String getScriptState(String key, String def) {
+        if (key == null || key.isEmpty()) {
+            return def;
+        }
+        try {
+            return loadScriptState().optString(key, def);
+        } catch (Exception e) {
+            LogHelp.e(TAG, "read custom script state failed", e);
+            return def;
+        }
+    }
+
+    /** 写入JS脚本持久化状态，比如脚本刷新后的Cookie或token */
+    private static synchronized void setScriptState(String key, String value) {
+        if (key == null || key.isEmpty()) {
+            return;
+        }
+        try {
+            var cfg = ConfigHelp.load();
+            var state = loadScriptState(cfg);
+            state.put(key, value == null ? "" : value);
+            cfg.put("custom_state_b64", Base64.getEncoder().encodeToString(state.toString().getBytes(StandardCharsets.UTF_8)));
+            ConfigHelp.save(cfg);
+        } catch (Exception e) {
+            LogHelp.e(TAG, "write custom script state failed", e);
+        }
+    }
+
+    private static JSONObject loadScriptState() {
+        return loadScriptState(ConfigHelp.load());
+    }
+
+    private static JSONObject loadScriptState(JSONObject cfg) {
+        var b64 = cfg.optString("custom_state_b64", "");
+        if (b64 == null || b64.isEmpty()) {
+            return new JSONObject();
+        }
+        try {
+            return new JSONObject(new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            LogHelp.e(TAG, "decode custom script state failed", e);
+            return new JSONObject();
+        }
+    }
+
+    /** 将当前上传上下文的文件流暴露给JS的 httpRequest(streamFile:true) 使用 */
+    private static RequestBody currentUploadBody() {
+        var upload = sUploadContext.get();
+        if (upload == null || upload.localFile == null) {
+            throw new IllegalStateException("streamFile requested without an active upload context");
+        }
+        return new FileRequestBody(upload.localFile, upload.listener, upload.taskId);
+    }
+
+    /** 当前下载目标文件，供JS脚本里的 httpDownload 使用 */
+    private static File currentDownloadTarget() {
+        var download = sDownloadContext.get();
+        if (download == null || download.localFile == null) {
+            throw new IllegalStateException("httpDownload requested without an active download context");
+        }
+        return download.localFile;
+    }
+
+    /** 把文本编码成Base64 */
+    private static String base64EncodeText(String value) {
+        return Base64.getEncoder().encodeToString((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** 把Base64文本解码成UTF-8字符串 */
+    private static String base64DecodeText(String value) {
+        try {
+            return new String(Base64.getDecoder().decode(value == null ? "" : value), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 计算任意算法的十六进制摘要文本 */
+    private static String hashHex(String algorithm, String value) {
+        var algo = algorithm == null || algorithm.isEmpty() ? "MD5" : algorithm;
+        try {
+            var digest = MessageDigest.getInstance(algo);
+            var bytes = digest.digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+            var out = new StringBuilder(bytes.length * 2);
+            for (var b : bytes) {
+                out.append(String.format(Locale.ROOT, "%02x", b & 0xff));
+            }
+            return out.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** 将HTTP响应转换为脚本可读对象 */
+    private static Scriptable responseToScriptObject(Scriptable scope, ScriptResponse response) {
+        var obj = Context.getCurrentContext().newObject(scope);
+        ScriptableObject.putProperty(obj, "code", response.code);
+        ScriptableObject.putProperty(obj, "body", response.body == null ? "" : response.body);
+        var headers = new LinkedHashMap<String, Object>();
+        headers.putAll(response.headers);
+        ScriptableObject.putProperty(obj, "headers", toNativeObject(scope, headers));
+        return obj;
+    }
+
     /** 从配置读取用户脚本；未配置或解码失败时使用默认示例脚本 */
     private static String script() {
         var b64 = ConfigHelp.getString("custom_script_b64", "");
@@ -400,6 +668,24 @@ public class CustomHttpFileHelp {
         }
     }
 
+    /** 计算文件SHA256 */
+    private static String sha256(File file) throws Exception {
+        var digest = MessageDigest.getInstance("SHA-256");
+        var buffer = new byte[BUFFER_SIZE];
+        try (var in = new java.io.FileInputStream(file)) {
+            var read = 0;
+            while ((read = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        var hash = digest.digest();
+        var result = new StringBuilder(hash.length * 2);
+        for (var b : hash) {
+            result.append(String.format(Locale.ROOT, "%02x", b & 0xff));
+        }
+        return result.toString();
+    }
+
     /** 读取raw资源中的默认脚本；无Context时返回短兜底脚本，正常设置页会传入Context */
     private static String readDefaultScript(android.content.Context context) {
         try {
@@ -407,12 +693,12 @@ public class CustomHttpFileHelp {
                 throw new IllegalStateException("context is null");
             }
             var sourceContext = context.createPackageContext(MODULE_PACKAGE, android.content.Context.CONTEXT_IGNORE_SECURITY);
-            try (var is = sourceContext.getResources().openRawResource(R.raw.custom_http_default)) {
+            try (var is = sourceContext.getResources().openRawResource(R.raw.custom_default)) {
                 return new String(is.readAllBytes(), StandardCharsets.UTF_8);
             }
         } catch (Exception e) {
             LogHelp.e(TAG, "read default custom script failed", e);
-            return "function testConnection(ctx){return {method:'GET',url:'http://127.0.0.1/'};}\n";
+            return "function testConnection(ctx){return false;}\n";
         }
     }
 
@@ -478,7 +764,31 @@ public class CustomHttpFileHelp {
         String method;
         String url;
         String body;
+        Boolean streamFile;
+        Boolean readBody;
         final Map<String, String> headers = new LinkedHashMap<>();
+    }
+
+    /** 当前上传任务上下文，供JS脚本里 httpRequest(streamFile:true) 复用 */
+    private static class UploadContext {
+        final File localFile;
+        final Object listener;
+        final String taskId;
+
+        UploadContext(File localFile, Object listener, String taskId) {
+            this.localFile = localFile;
+            this.listener = listener;
+            this.taskId = taskId;
+        }
+    }
+
+    /** 当前下载任务上下文 */
+    private static class DownloadContext {
+        final File localFile;
+
+        DownloadContext(File localFile) {
+            this.localFile = localFile;
+        }
     }
 
     /** HTTP响应的轻量包装，支持小响应缓存和大响应流式读取两种模式 */

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.widget.ImageView;
 import com.zgcwkj.comm.LogHelp;
 import com.zgcwkj.xpmibackup.R;
 
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -30,7 +32,6 @@ public class SettingsHook {
     private static final String TAG = "XpMiBackup";
     private static final String MODULE_PACKAGE = "com.zgcwkj.xpmibackup";
     private static final String MODULE_ACTIVITY = "com.zgcwkj.xpmibackup.MainActivity";
-    private static final String FALLBACK_ENTRY_TITLE = "云备份助手";
 
     /**
      * 注册所有设置相关Hook
@@ -39,6 +40,7 @@ public class SettingsHook {
     public void hook(XC_LoadPackage.LoadPackageParam lpparam) {
         // 配置程序入口
         hookUpdateHeaderList(lpparam);
+        hookHeaderIconSize(lpparam);
         // 强制支持智能存储备份
         hookGetAvailabilityStatus(lpparam);
         hookIsSupported(lpparam);
@@ -57,7 +59,7 @@ public class SettingsHook {
      * 1. 遍历header列表，通过title文字匹配找到"我的设备"的位置
      * 2. 防重复检查，避免多次调用导致重复插入
      * 3. 创建MIUI风格的PreferenceActivity.Header对象（非标准android.preference）
-     * 4. 设置标题、图标（使用设置APP图标）、跳转Intent
+     * 4. 设置标题、设置APP图标资源、跳转Intent
      * 5. 插入到"我的设备"项后面
      */
     private void hookUpdateHeaderList(XC_LoadPackage.LoadPackageParam lpparam) {
@@ -68,7 +70,7 @@ public class SettingsHook {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                         try {
-                            var list = (List) param.args[0];
+                            var list = headerList(param.args[0]);
                             if (list == null || list.isEmpty()) {
                                 return;
                             }
@@ -78,7 +80,13 @@ public class SettingsHook {
                                 return;
                             }
 
-                            if (myDeviceIndex + 1 < list.size() && isOurHeader(param.thisObject, list.get(myDeviceIndex + 1))) {
+                            if (myDeviceIndex + 1 < list.size() && isOurHeader(list.get(myDeviceIndex + 1))) {
+                                return;
+                            }
+
+                            var title = entryTitle(param.thisObject);
+                            var iconRes = settingsAppIconRes(param.thisObject);
+                            if (title == null || title.isEmpty() || iconRes <= 0) {
                                 return;
                             }
 
@@ -89,8 +97,8 @@ public class SettingsHook {
                                 lpparam.classLoader
                             );
                             var header = headerClass.getDeclaredConstructor().newInstance();
-                            XposedHelpers.setObjectField(header, "title", entryTitle(param.thisObject));
-                            XposedHelpers.setIntField(header, "iconRes", findIconRes(lpparam, param.thisObject));
+                            XposedHelpers.setObjectField(header, "title", title);
+                            XposedHelpers.setIntField(header, "iconRes", iconRes);
 
                             var intent = new Intent();
                             intent.setClassName(MODULE_PACKAGE, MODULE_ACTIVITY);
@@ -108,6 +116,92 @@ public class SettingsHook {
     }
 
     /**
+     * 对齐设置主页Header图标尺寸
+     * 部分系统会把外部注入的图标按异常尺寸显示，这里复用设置页自己的mNormalIconSize
+     */
+    private void hookHeaderIconSize(XC_LoadPackage.LoadPackageParam lpparam) {
+        try {
+            var clazz = XposedHelpers.findClass("com.android.settings.MiuiSettings$HeaderAdapter", lpparam.classLoader);
+            XposedBridge.hookAllMethods(clazz, "setIcon", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    try {
+                        if (param.args == null || param.args.length < 2 || !isOurHeader(param.args[1])) {
+                            return;
+                        }
+                        var icon = (ImageView) XposedHelpers.getObjectField(param.args[0], "icon");
+                        if (icon == null || icon.getLayoutParams() == null) {
+                            return;
+                        }
+                        applySettingsEntryIcon(icon);
+                        var iconSize = settingsHeaderIconSize(param.thisObject, icon);
+                        if (iconSize <= 0) {
+                            return;
+                        }
+                        var lp = icon.getLayoutParams();
+                        lp.width = iconSize;
+                        lp.height = iconSize;
+                        icon.setLayoutParams(lp);
+                        icon.setMinimumWidth(iconSize);
+                        icon.setMinimumHeight(iconSize);
+                        icon.setMaxWidth(iconSize);
+                        icon.setMaxHeight(iconSize);
+                        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                    } catch (Throwable e) {
+                        logError("settings header icon size adjust failed", e);
+                    }
+                }
+            });
+        } catch (Throwable e) {
+            logError("hookHeaderIconSize failed", e);
+        }
+    }
+
+    /**
+     * 使用设置入口图标作为Header图标
+     */
+    private void applySettingsEntryIcon(ImageView icon) {
+        try {
+            var context = icon.getContext().createPackageContext(MODULE_PACKAGE, Context.CONTEXT_IGNORE_SECURITY);
+            icon.setImageDrawable(context.getDrawable(R.drawable.ic_misettings));
+            icon.setPadding(0, 0, 0, 0);
+        } catch (Throwable e) {
+            logError("load settings entry icon failed", e);
+        }
+    }
+
+    /**
+     * 读取设置主页普通Header图标大小
+     */
+    private int settingsHeaderIconSize(Object adapter, ImageView icon) {
+        var normalIconSize = normalHeaderIconSize(adapter);
+        if (normalIconSize > 0) {
+            return normalIconSize;
+        }
+        var drawable = icon.getDrawable();
+        if (drawable != null) {
+            return Math.max(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
+        }
+        return 0;
+    }
+
+    /**
+     * 读取设置主页HeaderAdapter对应的mNormalIconSize字段
+     */
+    private int normalHeaderIconSize(Object adapter) {
+        try {
+            var owner = XposedHelpers.getSurroundingThis(adapter);
+            return XposedHelpers.getIntField(owner, "mNormalIconSize");
+        } catch (Throwable ignored) {
+        }
+        try {
+            return XposedHelpers.getIntField(adapter, "mNormalIconSize");
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    /**
      * 查找我的设备入口位置
      */
     private int findMyDeviceIndex(Object owner, List<?> list) {
@@ -122,9 +216,20 @@ public class SettingsHook {
     }
 
     /**
+     * 将反射拿到的Header列表转换成可插入的列表
+     */
+    @SuppressWarnings("unchecked")
+    private List<Object> headerList(Object value) {
+        if (value instanceof List) {
+            return (List<Object>) value;
+        }
+        return null;
+    }
+
+    /**
      * 判断是否为模块入口
      */
-    private boolean isOurHeader(Object owner, Object header) {
+    private boolean isOurHeader(Object header) {
         try {
             var intent = XposedHelpers.getObjectField(header, "intent");
             if (intent instanceof Intent) {
@@ -135,8 +240,7 @@ public class SettingsHook {
             }
         } catch (Throwable ignored) {
         }
-        var title = headerTitle(null, header);
-        return entryTitle(owner).equals(title) || FALLBACK_ENTRY_TITLE.equals(title);
+        return false;
     }
 
     /**
@@ -172,16 +276,13 @@ public class SettingsHook {
             } catch (Throwable ignored) {
             }
         }
-        return FALLBACK_ENTRY_TITLE;
+        return null;
     }
 
     /**
-     * 查找设置图标资源
+     * 读取设置APP图标资源
      */
-    private int findIconRes(XC_LoadPackage.LoadPackageParam lpparam, Object owner) {
-        if (lpparam.appInfo != null && lpparam.appInfo.icon > 0) {
-            return lpparam.appInfo.icon;
-        }
+    private int settingsAppIconRes(Object owner) {
         if (owner instanceof Context) {
             try {
                 var iconRes = ((Context) owner).getApplicationInfo().icon;
@@ -191,15 +292,7 @@ public class SettingsHook {
             } catch (Throwable ignored) {
             }
         }
-        try {
-            return XposedHelpers.getStaticIntField(
-                XposedHelpers.findClass("com.android.settings.R$drawable", lpparam.classLoader),
-                "com_miui_backup"
-            );
-        } catch (Throwable e) {
-            logError("find settings header icon failed", e);
-            return 0;
-        }
+        return 0;
     }
 
     /**
