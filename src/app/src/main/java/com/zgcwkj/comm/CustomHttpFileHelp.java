@@ -726,12 +726,15 @@ public class CustomHttpFileHelp {
     /** 通知小米备份当前上传进度 */
     private static void notifyProgress(Object listener, String taskId, long current, long total) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
         invokeProgress(listener, "D0", new Class[]{String.class, long.class, long.class}, taskId, current, total);
     }
 
     /** 通知小米备份任务完成或失败 */
     private static void notifyFinish(Object listener, String taskId, int code, String msg) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
+        msg = ProgressCallbackHelp.safeString(msg);
         invokeProgress(listener, "l0", new Class[]{String.class, int.class, String.class}, taskId, code, msg);
     }
 

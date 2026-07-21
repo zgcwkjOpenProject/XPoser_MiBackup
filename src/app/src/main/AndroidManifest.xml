@@ -18,6 +18,10 @@
             android:exported="true"
             android:windowSoftInputMode="adjustPan|stateHidden"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+            </intent-filter>
         </activity>
 
         <!-- Xposed模块标识 -->

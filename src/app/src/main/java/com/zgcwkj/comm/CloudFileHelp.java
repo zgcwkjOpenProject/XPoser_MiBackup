@@ -497,7 +497,7 @@ public class CloudFileHelp {
         return backupPath == null || backupPath.isEmpty() ? dirName : backupPath + "/" + dirName;
     }
 
-    /** 只有大于切片大小的文件才切片；0表示关闭切片 */
+    /** 判断文件是否需要切片；0表示关闭切片 */
     private static boolean shouldChunk(long fileSize) {
         var chunkSize = chunkSizeBytes();
         return chunkSize > 0 && fileSize > chunkSize;
@@ -544,6 +544,7 @@ public class CloudFileHelp {
     /** 通知IFileOperationProgressListener.onProgress或混淆后的等价方法 */
     private static void notifyProgress(Object listener, String taskId, long current, long total) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
         try {
             listener.getClass().getMethod("D0", String.class, long.class, long.class).invoke(listener, taskId, current, total);
         } catch (Exception e) {
@@ -571,6 +572,8 @@ public class CloudFileHelp {
         if (listener == null) {
             return;
         }
+        taskId = ProgressCallbackHelp.safeString(taskId);
+        msg = ProgressCallbackHelp.safeString(msg);
         try {
             listener.getClass().getMethod("onFinish", String.class, int.class, String.class).invoke(listener, taskId, code, msg);
         } catch (Exception e) {

@@ -15,7 +15,9 @@ import android.os.Parcelable;
 import android.os.ResultReceiver;
 import com.zgcwkj.comm.CloudFileHelp;
 import com.zgcwkj.comm.ConfigHelp;
+import com.zgcwkj.comm.LocalBackupFileHelp;
 import com.zgcwkj.comm.LogHelp;
+import com.zgcwkj.comm.ProgressCallbackHelp;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
@@ -44,7 +46,6 @@ public class AIDLHook {
     private static final String KEY_DATA = "data";
     private static final String KEY_MESSAGE = "message";
     private static final String TAG = "XpMiBackup";
-    private static final String TEMP_BACKUP_ROOT = "/sdcard/MIUI/backup/AllBackupTemp/";
     private static final String DFS_ROOT_PATH = "";
     private static volatile IBinder mockBinder;
     private static volatile ExecutorService uploadExecutor;
@@ -67,18 +68,18 @@ public class AIDLHook {
     }
 
     /**
-     * 安装DFS服务发现、绑定和低层Binder兜底Hook
+     * 安装DFS服务发现、绑定和低层Binder Hook
      */
     public void hook(XC_LoadPackage.LoadPackageParam lpparam) {
-        hookQueryIntentServices(lpparam);
+        hookQueryIntentServices();
         hookBindService(lpparam);
-        hookBinderProxyTransact(lpparam);
+        hookBinderProxyTransact();
     }
 
     /**
      * 伪造DFS服务查询结果，让SDK认为设备上存在米联DFS服务
      */
-    private void hookQueryIntentServices(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookQueryIntentServices() {
         try {
             XposedHelpers.findAndHookMethod(Class.forName("android.app.ApplicationPackageManager"), "queryIntentServices", new Object[]{Intent.class, Integer.TYPE, new XC_MethodHook() {
                 /**
@@ -116,7 +117,7 @@ public class AIDLHook {
     /**
      * 处理ContextWrapper.bindService，把DFS服务连接回调切到模拟Binder
      */
-    class BindServiceHook extends XC_MethodHook {
+    private class BindServiceHook extends XC_MethodHook {
         final XC_LoadPackage.LoadPackageParam val$lpparam;
 
         /**
@@ -164,7 +165,7 @@ public class AIDLHook {
     /**
      * 兜底短路部分SDK直接发出的one-way Binder调用，避免真实DFS服务缺失导致异常
      */
-    private void hookBinderProxyTransact(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void hookBinderProxyTransact() {
         try {
             XposedHelpers.findAndHookMethod(Class.forName("android.os.BinderProxy"), "transact", new Object[]{Integer.TYPE, Parcel.class, Parcel.class, Integer.TYPE, new XC_MethodHook() {
                 /**
@@ -203,7 +204,7 @@ public class AIDLHook {
     /**
      * 创建本地Binder，并用动态代理实现IDistFileClientKit
      */
-    public IBinder createMockBinder(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+    private IBinder createMockBinder(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         var unsafeClass = Class.forName("sun.misc.Unsafe");
         var unsafeField = unsafeClass.getDeclaredField("theUnsafe");
         unsafeField.setAccessible(true);
@@ -231,7 +232,7 @@ public class AIDLHook {
     /**
      * 按参数签名分发AIDL方法，同时兼容旧版可读方法名和新版混淆方法名
      */
-    public Object handleAidlMethod(Method method, Object[] args, XC_LoadPackage.LoadPackageParam lpparam) {
+    private Object handleAidlMethod(Method method, Object[] args, XC_LoadPackage.LoadPackageParam lpparam) {
         var name = method.getName();
         if ("asBinder".equals(name)) {
             return mockBinder;
@@ -292,7 +293,7 @@ public class AIDLHook {
     private void mockRemoteToRemoteOk(Object[] args) {
         var taskId = (String) args[1];
         var listener = args[4];
-        invokeProgress(listener, "Y0", new Class[]{String.class}, taskId);
+        notifyProgressStart(listener, taskId);
         notifyProgressFinish(listener, taskId, 0, "success");
     }
 
@@ -313,7 +314,7 @@ public class AIDLHook {
     /**
      * 模拟DFS连接结果，并在连接成功后初始化备份应用内部DFS状态
      */
-    public void sendMockConnectResult(Object listener, String deviceId, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void sendMockConnectResult(Object listener, String deviceId, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             var connected = CloudFileHelp.testConnection();
             if (listener != null) {
@@ -348,12 +349,10 @@ public class AIDLHook {
     /**
      * 构造设备列表回调，供小米备份页面展示远端设备
      */
-    public void sendMockDeviceList(Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void sendMockDeviceList(Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
         if (receiver != null) {
             try {
-                var bundle = new Bundle();
-                bundle.putInt(KEY_CODE, 0);
-                bundle.putString(KEY_MESSAGE, "success");
+                var bundle = successBundle();
                 var list = new ArrayList<Parcelable>();
                 list.add(createDeviceInfo(lpparam));
                 bundle.putParcelableArrayList(KEY_DATA, list);
@@ -381,7 +380,7 @@ public class AIDLHook {
     /**
      * 发送模拟设备在线回调，并补齐内部DFS初始化
      */
-    public void sendMockDeviceState(Object listener, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void sendMockDeviceState(Object listener, XC_LoadPackage.LoadPackageParam lpparam) {
         if (listener != null) {
             try {
                 invokeDeviceState(listener, "K", createDeviceInfo(lpparam));
@@ -409,16 +408,14 @@ public class AIDLHook {
     /**
      * 从当前云端备份协议读取目录，并转换成小米NAS恢复列表需要的结果
      */
-    public void sendMockList(String remotePath, Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void sendMockList(String remotePath, Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             var remoteDir = normalizeRemotePath(remotePath);
             var entries = CloudFileHelp.listEntries(remoteDir);
             var aidlDir = normalizeAidlListPath(remotePath);
             entries = normalizeListEntries(entries, aidlDir);
             if (receiver != null) {
-                var bundle = new Bundle();
-                bundle.putInt(KEY_CODE, 0);
-                bundle.putString(KEY_MESSAGE, "success");
+                var bundle = successBundle();
                 bundle.putParcelable(KEY_DATA, createSmbFileBatchResult(entries, aidlDir, lpparam));
                 invokeReceiverSend(receiver, 0, bundle);
             }
@@ -436,9 +433,7 @@ public class AIDLHook {
             return;
         }
         try {
-            var bundle = new Bundle();
-            bundle.putInt(KEY_CODE, 0);
-            bundle.putString(KEY_MESSAGE, "success");
+            var bundle = successBundle();
             bundle.putParcelable(KEY_DATA, createSmbFileBatchResult(new ArrayList<>(), ".AllBackup", lpparam));
             invokeReceiverSend(receiver, 0, bundle);
         } catch (Exception e) {
@@ -454,7 +449,6 @@ public class AIDLHook {
         var pfd = (ParcelFileDescriptor) args[2];
         var aidlPath = (String) args[3];
         var listener = args[5];
-        var lp = lpparam;
         if (pfd == null) {
             return;
         }
@@ -464,7 +458,7 @@ public class AIDLHook {
              */
             @Override
             public final void run() {
-                AIDLHook.this.runMockUpload(pfd, aidlPath, listener, taskId, lp);
+                AIDLHook.this.runMockUpload(pfd, aidlPath, listener, taskId, lpparam);
             }
         });
     }
@@ -472,7 +466,7 @@ public class AIDLHook {
     /**
      * 执行上传并保证文件描述符最终关闭
      */
-    public void runMockUpload(ParcelFileDescriptor pfd, String aidlPath, Object listener, String taskId, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void runMockUpload(ParcelFileDescriptor pfd, String aidlPath, Object listener, String taskId, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             keepDfsConnected(lpparam);
             uploadViaFd(pfd, aidlPath, listener, taskId);
@@ -497,14 +491,13 @@ public class AIDLHook {
         final long startPos = ((Long) args[4]).longValue();
         var listener = args[5];
         final int flags = ((Integer) args[6]).intValue();
-        var lp = lpparam;
         if (pfd == null) {
             return;
         }
         runAsync("download", new Runnable() {
             @Override
             public final void run() {
-                AIDLHook.this.runMockDownload(taskId, aidlPath, startPos, flags, pfd, listener, lp);
+                AIDLHook.this.runMockDownload(taskId, aidlPath, startPos, flags, pfd, listener, lpparam);
             }
         });
     }
@@ -512,11 +505,11 @@ public class AIDLHook {
     /**
      * 执行下载并把完成或失败状态回调给小米备份
      */
-    public void runMockDownload(String taskId, String aidlPath, long startPos, int flags, ParcelFileDescriptor pfd, Object listener, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void runMockDownload(String taskId, String aidlPath, long startPos, int flags, ParcelFileDescriptor pfd, Object listener, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             BackupHook.clearActiveBackupDirs();
             keepDfsConnected(lpparam);
-            downloadViaFd(aidlPath, pfd, listener, taskId);
+            downloadViaFd(aidlPath, pfd, taskId);
             keepDfsConnected(lpparam);
             notifyProgressFinish(listener, taskId, 0, "success");
         } catch (Exception e) {
@@ -532,7 +525,7 @@ public class AIDLHook {
     /**
      * 模拟文件存在性检查调用
      */
-    private void mockExists(Object[] args, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void mockExists(Object[] args) {
         var receiver = args[2];
         runAsync("exists", new Runnable() {
             @Override
@@ -545,12 +538,10 @@ public class AIDLHook {
     /**
      * 返回存在结果；这里保持成功，交给后续读写流程验证真实文件
      */
-    public void sendMockExists(Object receiver) {
+    private void sendMockExists(Object receiver) {
         if (receiver != null) {
             try {
-                var bundle = new Bundle();
-                bundle.putInt(KEY_CODE, 0);
-                bundle.putString(KEY_MESSAGE, "success");
+                var bundle = successBundle();
                 bundle.putInt(KEY_DATA, 1);
                 invokeReceiverSend(receiver, 0, bundle);
             } catch (Exception e) {
@@ -575,12 +566,10 @@ public class AIDLHook {
     /**
      * 构造共享目录信息，供小米备份显示远端容量
      */
-    public void sendMockSharePathInfo(Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void sendMockSharePathInfo(Object receiver, XC_LoadPackage.LoadPackageParam lpparam) {
         if (receiver != null) {
             try {
-                var bundle = new Bundle();
-                bundle.putInt(KEY_CODE, 0);
-                bundle.putString(KEY_MESSAGE, "success");
+                var bundle = successBundle();
                 var list = new ArrayList<Parcelable>();
                 list.add(createPathInfo(lpparam));
                 bundle.putParcelableArrayList(KEY_DATA, list);
@@ -598,7 +587,7 @@ public class AIDLHook {
         if ("i0".equals(name) || "list".equals(name)) {
             mockList(args, lpparam);
         } else if ("f0".equals(name) || "exists".equals(name)) {
-            mockExists(args, lpparam);
+            mockExists(args);
         } else {
             mockSimpleOk(args, name);
         }
@@ -620,18 +609,26 @@ public class AIDLHook {
     /**
      * 为mkdir、delete、cancel等不需要真实数据的调用返回成功
      */
-    public void sendSimpleOk(Object receiver, String operation) {
+    private void sendSimpleOk(Object receiver, String operation) {
         if (receiver != null) {
             try {
-                var bundle = new Bundle();
-                bundle.putInt(KEY_CODE, 0);
-                bundle.putString(KEY_MESSAGE, "success");
+                var bundle = successBundle();
                 bundle.putInt(KEY_DATA, 0);
                 invokeReceiverSend(receiver, 0, bundle);
             } catch (Exception e) {
                 logError("mock " + operation + " failed", e);
             }
         }
+    }
+
+    /**
+     * 创建DFS ResultReceiver成功回调数据
+     */
+    private static Bundle successBundle() {
+        var bundle = new Bundle();
+        bundle.putInt(KEY_CODE, 0);
+        bundle.putString(KEY_MESSAGE, "success");
+        return bundle;
     }
 
     /**
@@ -818,8 +815,7 @@ public class AIDLHook {
             parcel.writeInt(1);
             parcel.writeTypedList(smbFiles);
             parcel.setDataPosition(0);
-            var creator = (Parcelable.Creator) clazz.getField("CREATOR").get(null);
-            return (Parcelable) creator.createFromParcel(parcel);
+            return createFromParcel(clazz, parcel);
         } finally {
             parcel.recycle();
         }
@@ -848,8 +844,7 @@ public class AIDLHook {
             parcel.writeLong(modified);
             parcel.writeParcelable(null, 0);
             parcel.setDataPosition(0);
-            var creator = (Parcelable.Creator) clazz.getField("CREATOR").get(null);
-            return (Parcelable) creator.createFromParcel(parcel);
+            return createFromParcel(clazz, parcel);
         } finally {
             parcel.recycle();
         }
@@ -868,8 +863,7 @@ public class AIDLHook {
             parcel.writeInt(128);
             parcel.writeInt(1);
             parcel.setDataPosition(0);
-            var creator = (Parcelable.Creator) clazz.getField("CREATOR").get(null);
-            return (Parcelable) creator.createFromParcel(parcel);
+            return createFromParcel(clazz, parcel);
         } finally {
             parcel.recycle();
         }
@@ -888,14 +882,22 @@ public class AIDLHook {
             parcel.writeLong(1099511627776L);
             parcel.writeLong(1099511627776L);
             parcel.writeByte((byte) 1);
-            parcel.writeTypedList(new ArrayList());
+            parcel.writeTypedList(new ArrayList<Parcelable>());
             parcel.writeBundle(new Bundle());
             parcel.setDataPosition(0);
-            var creator = (Parcelable.Creator) clazz.getField("CREATOR").get(null);
-            return (Parcelable) creator.createFromParcel(parcel);
+            return createFromParcel(clazz, parcel);
         } finally {
             parcel.recycle();
         }
+    }
+
+    /**
+     * 通过目标应用的CREATOR从Parcel还原Parcelable，反射泛型转换集中在这里处理
+     */
+    @SuppressWarnings("unchecked")
+    private static Parcelable createFromParcel(Class<?> clazz, Parcel parcel) throws Exception {
+        var creator = (Parcelable.Creator<? extends Parcelable>) clazz.getField("CREATOR").get(null);
+        return creator.createFromParcel(parcel);
     }
 
     /**
@@ -905,22 +907,29 @@ public class AIDLHook {
         var remotePath = normalizeRemotePath(aidlPath);
         var remoteDir = extractRemoteDir(remotePath);
         var fileName = extractFileName(remotePath);
-        var tmpFile = new File(TEMP_BACKUP_ROOT + taskId + "/" + fileName);
-        tmpFile.getParentFile().mkdirs();
+        var localFile = LocalBackupFileHelp.resolveUploadFile(pfd, aidlPath);
+        var copiedTempFile = localFile == null ? LocalBackupFileHelp.createUploadTempFile(aidlPath, fileName) : null;
         try {
             BackupHook.recordActiveBackupDir(remoteDir);
             notifyProgressStart(listener, taskId);
-            try (var is = new FileInputStream(pfd.getFileDescriptor()); var os = new FileOutputStream(tmpFile)) {
-                copyStream(is, os);
+            if (localFile == null) {
+                copiedTempFile.getParentFile().mkdirs();
+                try (var is = new FileInputStream(pfd.getFileDescriptor()); var os = new FileOutputStream(copiedTempFile)) {
+                    copyStream(is, os);
+                }
+                localFile = copiedTempFile;
             }
-            CloudFileHelp.uploadWithProgress(tmpFile.getAbsolutePath(), listener, remoteDir, taskId);
+            CloudFileHelp.uploadWithProgress(localFile.getAbsolutePath(), listener, remoteDir, taskId);
             if (isBackupEndFile(fileName)) {
+                uploadLocalDescriptorIfPresent(localFile.getParentFile(), remoteDir);
                 CloudFileHelp.cleanupOldBackups();
                 BackupHook.clearActiveBackupDirs();
             }
         } finally {
-            deleteTempFile(tmpFile);
-            deleteEmptyDir(tmpFile.getParentFile());
+            if (copiedTempFile != null) {
+                deleteTempFile(copiedTempFile);
+                LocalBackupFileHelp.deleteEmptyDirsUntilTempRoot(copiedTempFile.getParentFile());
+            }
         }
     }
 
@@ -932,19 +941,36 @@ public class AIDLHook {
     }
 
     /**
+     * 自动备份完成时补传本地备份描述文件
+     */
+    private static void uploadLocalDescriptorIfPresent(File backupDir, String remoteDir) {
+        if (backupDir == null || remoteDir == null || remoteDir.isEmpty()) {
+            return;
+        }
+        var descriptFile = new File(backupDir, "descript.xml");
+        if (!descriptFile.exists() || !descriptFile.isFile()) {
+            return;
+        }
+        var result = CloudFileHelp.upload(descriptFile.getAbsolutePath(), remoteDir);
+        if (result != null && result.startsWith("ERROR:")) {
+            logError("upload local descript.xml failed", new IllegalStateException(result));
+        }
+    }
+
+    /**
      * 提前通知小米备份当前任务已开始，避免本地临时文件阶段列表没有焦点
      */
     private static void notifyProgressStart(Object listener, String taskId) {
-        invokeProgress(listener, "Y0", new Class[]{String.class}, taskId);
+        invokeProgress(listener, "Y0", new Class[]{String.class}, ProgressCallbackHelp.safeString(taskId));
         BackupHook.notifyNasItemTaskStart(listener, taskId);
     }
 
     /**
      * 从当前云端备份协议下载文件并写入ParcelFileDescriptor
      */
-    private void downloadViaFd(String aidlPath, ParcelFileDescriptor pfd, Object listener, String taskId) throws Exception {
+    private void downloadViaFd(String aidlPath, ParcelFileDescriptor pfd, String taskId) throws Exception {
         var remotePath = normalizeRemotePath(aidlPath);
-        var tmpFile = new File(TEMP_BACKUP_ROOT + taskId + "_download_tmp");
+        var tmpFile = new File(LocalBackupFileHelp.TEMP_BACKUP_ROOT + taskId + "_download_tmp");
         tmpFile.getParentFile().mkdirs();
         try {
             var result = CloudFileHelp.downloadFile(remotePath, tmpFile.getAbsolutePath());
@@ -979,18 +1005,6 @@ public class AIDLHook {
     private static void deleteTempFile(File file) {
         if (file != null && file.exists() && !file.delete()) {
             logError("delete temp file failed", new IllegalStateException(file.getAbsolutePath()));
-        }
-    }
-
-    /**
-     * 删除空临时目录，目录仍有内容时保持不动
-     */
-    private static void deleteEmptyDir(File dir) {
-        if (dir != null && dir.exists() && dir.isDirectory()) {
-            var children = dir.list();
-            if ((children == null || children.length == 0) && !dir.delete()) {
-                logError("delete temp dir failed", new IllegalStateException(dir.getAbsolutePath()));
-            }
         }
     }
 
@@ -1072,7 +1086,7 @@ public class AIDLHook {
             return;
         }
         field.setAccessible(true);
-        var tempPath = TEMP_BACKUP_ROOT + deviceId;
+        var tempPath = LocalBackupFileHelp.TEMP_BACKUP_ROOT + deviceId;
         field.set(instance, tempPath);
         var tempDir = new File(tempPath);
         if (!tempDir.exists() && !tempDir.mkdirs()) {
@@ -1322,10 +1336,11 @@ public class AIDLHook {
     /**
      * 先按可读名调用进度回调，再按签名匹配混淆版本
      */
-    static void invokeProgress(Object obj, String method, Class<?>[] types, Object... args) {
+    private static void invokeProgress(Object obj, String method, Class<?>[] types, Object... args) {
         if (obj == null) {
             return;
         }
+        args = ProgressCallbackHelp.sanitizeStringArgs(types, args);
         try {
             obj.getClass().getMethod(method, types).invoke(obj, args);
         } catch (Exception e) {
@@ -1359,8 +1374,9 @@ public class AIDLHook {
     /**
      * 通知单个文件传输完成或失败
      */
-    static void notifyProgressFinish(Object listener, String taskId, int code, String msg) {
-        invokeProgress(listener, "l0", new Class[]{String.class, Integer.TYPE, String.class}, taskId, Integer.valueOf(code), msg);
+    private static void notifyProgressFinish(Object listener, String taskId, int code, String msg) {
+        invokeProgress(listener, "l0", new Class[]{String.class, Integer.TYPE, String.class},
+            ProgressCallbackHelp.safeString(taskId), Integer.valueOf(code), ProgressCallbackHelp.safeString(msg));
     }
 
     /**

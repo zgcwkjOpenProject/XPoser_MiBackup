@@ -369,12 +369,15 @@ public class WebdavFileHelp {
     /** IFileOperationProgressListener回调：通知进度 */
     private static void notifyProgress(Object listener, String taskId, long current, long total) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
         invokeProgress(listener, "D0", new Class[]{String.class, long.class, long.class}, taskId, current, total);
     }
 
     /** IFileOperationProgressListener回调：通知完成 */
     private static void notifyFinish(Object listener, String taskId, int code, String msg) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
+        msg = ProgressCallbackHelp.safeString(msg);
         invokeProgress(listener, "l0", new Class[]{String.class, int.class, String.class}, taskId, code, msg);
     }
 

@@ -55,7 +55,7 @@ public class SmbFileHelp {
             }
         }
 
-        /** 确保远程目录存在 */
+        /** 创建远程目录 */
         void mkdir(String path) {
             if (path != null && !path.isEmpty()) {
                 try { share.mkdir(path); } catch (Exception ignored) {}
@@ -140,8 +140,9 @@ public class SmbFileHelp {
         }
     }
 
-    /** 递归删除SMB目录 */
-    /** 兼容完整云端路径和相对备份目录名两种删除调用 */
+    /** 递归删除SMB目录
+     * 兼容完整云端路径和相对备份目录名两种删除调用
+     */
     private static String normalizeDeletePath(String backupPath, String remoteDir) {
         if (remoteDir == null || remoteDir.isEmpty()) {
             return backupPath;
@@ -311,16 +312,19 @@ public class SmbFileHelp {
     /** IFileOperationProgressListener回调：通知进度 */
     private static void notifyProgress(Object listener, String taskId, long current, long total) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
         invokeProgress(listener, "D0", new Class[]{String.class, long.class, long.class}, taskId, current, total);
     }
 
     /** IFileOperationProgressListener回调：通知完成 */
     private static void notifyFinish(Object listener, String taskId, int code, String msg) {
         if (listener == null) return;
+        taskId = ProgressCallbackHelp.safeString(taskId);
+        msg = ProgressCallbackHelp.safeString(msg);
         invokeProgress(listener, "l0", new Class[]{String.class, int.class, String.class}, taskId, code, msg);
     }
 
-    /** 兼容新版混淆名和旧版明文名，按参数签名兜底查找回调方法 */
+    /** 按参数签名查找进度回调方法 */
     private static void invokeProgress(Object listener, String method, Class<?>[] types, Object... args) {
         try {
             listener.getClass().getMethod(method, types).invoke(listener, args);
