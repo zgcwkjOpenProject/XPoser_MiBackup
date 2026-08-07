@@ -325,6 +325,25 @@
                 android:layout_marginBottom="24dp" />
         </LinearLayout>
 
+        <Switch
+            android:id="@+id/sw_encrypt_enabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/enable_encryption"
+            android:textSize="14sp"
+            android:textColor="@color/text_primary"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/enable_encryption_description"
+            android:textSize="12sp"
+            android:textColor="@color/text_hint"
+            android:layout_marginBottom="20dp" />
+
         <Button
             android:id="@+id/btn_save"
             android:layout_width="match_parent"

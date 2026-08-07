@@ -11,6 +11,7 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * 配置文件读写工具
@@ -21,6 +22,18 @@ public class ConfigHelp {
     private static final String TAG = "XpMiBackup";
     public static final String BACKUP_ROOT = "/sdcard/MIUI/backup";
     private static final String CONFIG_PATH = BACKUP_ROOT + "/config.ini";
+
+    // 需要加密存储的敏感连接与凭证字段
+    private static final Set<String> CRED_KEYS = Set.of(
+            "smb_server",
+            "smb_port",
+            "smb_share",
+            "smb_user",
+            "smb_pass",
+            "webdav_url",
+            "webdav_user",
+            "webdav_pass"
+    );
 
     /**
      * 加载配置并补齐默认值
@@ -60,6 +73,17 @@ public class ConfigHelp {
                 LogHelp.e(TAG, "put config value failed: " + entry.getKey(), e);
             }
         }
+        // 对密码字段解密（旧版明文不含 enc: 前缀，CredentialHelp.decrypt 会原样返回，实现无缝升级）
+        var salt = json.optString("credential_salt", "");
+        for (var key : CRED_KEYS) {
+            if (json.has(key)) {
+                try {
+                    json.put(key, CredentialHelp.decrypt(json.optString(key), salt));
+                } catch (Exception e) {
+                    LogHelp.e(TAG, "decrypt config key failed: " + key, e);
+                }
+            }
+        }
         return json;
     }
 
@@ -68,6 +92,7 @@ public class ConfigHelp {
      * 先创建父目录再打开文件，避免首次保存时 FileWriter 因目录不存在而失败
      */
     public static void save(JSONObject json) {
+        LogHelp.v(TAG, "save: called, json.keys=" + json.length());
         var file = new File(CONFIG_PATH);
         var dir = file.getParentFile();
         try {
@@ -80,16 +105,38 @@ public class ConfigHelp {
         }
 
         try (var writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+            LogHelp.v(TAG, "save: writer opened OK");
+            var encryptEnabled = json.optBoolean("encrypt_enabled", true);
+            // 确保 credential_salt 存在，首次保存时自动生成
+            var salt = json.optString("credential_salt", "");
+            LogHelp.v(TAG, "save: salt.len=" + salt.length() + ", salt.empty=" + salt.isEmpty() + ", encryptEnabled=" + encryptEnabled);
+            if (salt.isEmpty()) {
+                salt = CredentialHelp.generateSalt();
+                try { json.put("credential_salt", salt); } catch (Exception ignored) {}
+                LogHelp.v(TAG, "save: new salt generated");
+            }
             var keys = json.keys();
             while (keys.hasNext()) {
                 var key = keys.next();
                 var val = json.opt(key);
-                writer.write(key + "=" + (val != null ? val.toString() : ""));
+                var valStr = val != null ? val.toString() : "";
+                // 敏感连接与凭证字段写入前根据开关加密，不修改调用方的 JSONObject
+                if (CRED_KEYS.contains(key)) {
+                    if (encryptEnabled) {
+                        LogHelp.v(TAG, "save: encrypting key=" + key + ", valStr.len=" + valStr.length());
+                        valStr = CredentialHelp.encrypt(valStr, salt);
+                        LogHelp.v(TAG, "save: encrypted key=" + key + ", result.len=" + valStr.length());
+                    } else {
+                        LogHelp.v(TAG, "save: encryption disabled, saving plain key=" + key);
+                    }
+                }
+                writer.write(key + "=" + valStr);
                 writer.newLine();
             }
             writer.flush();
+            LogHelp.v(TAG, "save: flush OK");
         } catch (Exception e) {
-            LogHelp.e(TAG, "save config failed: " + e.getMessage(), e);
+            LogHelp.e(TAG, "save config failed: " + e.getClass().getName() + ": " + e.getMessage(), e);
         }
     }
 
@@ -122,6 +169,7 @@ public class ConfigHelp {
         map.put("backup_path", "MIUI/backup");
         map.put("backup_max", "5");
         map.put("log_enabled", "false");
+        map.put("encrypt_enabled", "true");
         map.put("protocol", "smb");
         map.put("upload_threads", "3");
         map.put("chunk_size_mb", "64");

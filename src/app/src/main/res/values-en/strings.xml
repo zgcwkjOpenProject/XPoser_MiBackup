@@ -43,6 +43,8 @@
     <string name="custom_script">Custom JS script</string>
     <string name="custom_script_hint">Write server URL and token in the script</string>
     <string name="test_and_save_config">Save and test configuration</string>
+    <string name="enable_encryption">Enable configuration encryption</string>
+    <string name="enable_encryption_description">Encrypt sensitive data such as server addresses, ports, usernames, and passwords</string>
     <string name="testing_connection">Testing connection...</string>
 
     <string name="toast_device_id_required">Please enter a device ID in Device settings first.</string>

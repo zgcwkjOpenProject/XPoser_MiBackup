@@ -42,6 +42,8 @@
     <string name="custom_protocol">自定义</string>
     <string name="custom_script">自定义 JS 脚本</string>
     <string name="custom_script_hint">服务器地址和 Token 写在脚本里</string>
+    <string name="enable_encryption">启用配置加密</string>
+    <string name="enable_encryption_description">加密存储服务器地址、端口、账号及密码等敏感数据</string>
     <string name="test_and_save_config">保存并测试配置</string>
     <string name="testing_connection">正在测试连接…</string>
 

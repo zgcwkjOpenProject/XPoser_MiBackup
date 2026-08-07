@@ -9,6 +9,7 @@ import android.view.ViewGroup;
 import android.content.Intent;
 import android.net.Uri;
 import android.widget.EditText;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -41,6 +42,7 @@ public class ServiceConfigFragment extends Fragment {
     private EditText etSmbServer, etSmbPort, etSmbShare, etSmbUser, etSmbPass;
     private EditText etWebdavUrl, etWebdavUser, etWebdavPass;
     private EditText etCustomScript;
+    private Switch swEncryptEnabled;
     private Button btnSave;
     private LinearLayout testingPanel;
 
@@ -72,6 +74,7 @@ public class ServiceConfigFragment extends Fragment {
         etWebdavUser = view.findViewById(R.id.et_webdav_user);
         etWebdavPass = view.findViewById(R.id.et_webdav_pass);
         etCustomScript = view.findViewById(R.id.et_custom_script);
+        swEncryptEnabled = view.findViewById(R.id.sw_encrypt_enabled);
         etCustomScript.setVerticalScrollBarEnabled(true);
         etCustomScript.setOnTouchListener((v, event) -> {
             // EditText位于外层ScrollView内，触摸脚本框时让它优先消费上下滑动
@@ -148,6 +151,7 @@ public class ServiceConfigFragment extends Fragment {
         showProtocolPanel(protocolCheckedId(protocol));
         etUploadThreads.setText(cfg.optString("upload_threads", "3"));
         etChunkSizeMb.setText(cfg.optString("chunk_size_mb", "64"));
+        swEncryptEnabled.setChecked(cfg.optBoolean("encrypt_enabled", true));
         // SMB配置
         etSmbServer.setText(cfg.optString("smb_server", ""));
         etSmbPort.setText(String.valueOf(cfg.optInt("smb_port", 445)));
@@ -173,6 +177,7 @@ public class ServiceConfigFragment extends Fragment {
             cfg.put("protocol", selectedProtocol());
             cfg.put("upload_threads", etUploadThreads.getText().toString().trim());
             cfg.put("chunk_size_mb", etChunkSizeMb.getText().toString().trim());
+            cfg.put("encrypt_enabled", swEncryptEnabled.isChecked());
             cfg.put("smb_server", etSmbServer.getText().toString().trim());
             cfg.put("smb_port", Integer.parseInt(etSmbPort.getText().toString().trim()));
             cfg.put("smb_share", etSmbShare.getText().toString().trim());
