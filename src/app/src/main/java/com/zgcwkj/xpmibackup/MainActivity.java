@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.WindowInsets;
 import android.widget.TextView;
 
 /**
@@ -24,8 +25,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(getResources().getColor(R.color.primary));
+        // 沉浸式：内容延伸到状态栏与导航栏之下，再按实际系统栏尺寸给内部控件补内边距
+        getWindow().setDecorFitsSystemWindows(false);
         setContentView(R.layout.activity_main);
+        applyWindowInsets();
 
         tabDeviceIcon = findViewById(R.id.tab_device_icon);
         tabDeviceText = findViewById(R.id.tab_device_text);
@@ -42,13 +45,6 @@ public class MainActivity extends Activity {
             return true;
         });
 
-        // 状态栏占位：动态设置空白View高度为状态栏高度
-        var statusBarRes = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        if (statusBarRes > 0) {
-            var spacer = findViewById(R.id.status_bar_spacer);
-            spacer.getLayoutParams().height = getResources().getDimensionPixelSize(statusBarRes);
-        }
-
         // 检查文件管理权限，未授权则跳转系统设置页面
         if (!Environment.isExternalStorageManager()) {
             var intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
@@ -58,6 +54,42 @@ public class MainActivity extends Activity {
         }
 
         if (savedInstanceState == null) switchTab("device");
+    }
+
+    /**
+     * 沉浸式布局
+     *
+     * 绿色标题栏与 Tab 栏铺满到屏幕边缘（含状态栏/导航栏区域），
+     * 只有文字与内容按系统栏尺寸内缩。
+     * 底部 Tab 栏叠加导航栏内边距并同步加高，
+     * 这样三键虚拟导航键不会盖住 Tab 选项，全面屏手势条同样适用。
+     */
+    private void applyWindowInsets() {
+        var root = findViewById(R.id.root);
+        var spacer = findViewById(R.id.status_bar_spacer);
+        var titleBar = findViewById(R.id.title_bar);
+        var content = findViewById(R.id.fragment_container);
+        var tabBar = findViewById(R.id.tab_bar);
+        var tabHeight = getResources().getDimensionPixelSize(R.dimen.tab_bar_height);
+        // 标题栏原有的左右内边距，系统栏内边距需叠加在它之上
+        var titlePaddingStart = titleBar.getPaddingStart();
+        var titlePaddingEnd = titleBar.getPaddingEnd();
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            // 刘海屏的挖孔区域也计入，避免内容被遮挡
+            var bars = insets.getInsets(
+                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            var spacerParams = spacer.getLayoutParams();
+            spacerParams.height = bars.top;
+            spacer.setLayoutParams(spacerParams);
+            titleBar.setPaddingRelative(titlePaddingStart + bars.left, 0,
+                titlePaddingEnd + bars.right, 0);
+            content.setPadding(bars.left, 0, bars.right, 0);
+            tabBar.setPadding(bars.left, 0, bars.right, bars.bottom);
+            var tabParams = tabBar.getLayoutParams();
+            tabParams.height = tabHeight + bars.bottom;
+            tabBar.setLayoutParams(tabParams);
+            return insets;
+        });
     }
 
     /**

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -14,6 +15,7 @@
 
     <!-- 顶部标题栏 -->
     <LinearLayout
+        android:id="@+id/title_bar"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:background="@color/primary"
@@ -56,8 +58,9 @@
 
     <!-- 底部Tab栏 -->
     <LinearLayout
+        android:id="@+id/tab_bar"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="@dimen/tab_bar_height"
         android:background="@color/surface"
         android:orientation="horizontal"
         android:elevation="8dp">

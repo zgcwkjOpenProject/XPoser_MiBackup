@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 底部 Tab 栏高度（不含系统导航栏内边距） -->
+    <dimen name="tab_bar_height">56dp</dimen>
+</resources>
